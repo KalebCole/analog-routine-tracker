@@ -282,7 +282,7 @@ When a routine is modified (item added, removed, reordered, or type changed):
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                         FRONTEND                                │
-│                    Next.js on Vercel                            │
+│                    Next.js on Azure Static Web Apps             │
 │                                                                 │
 │  Pages:                                                         │
 │  ──────                                                         │
