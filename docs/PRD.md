@@ -585,6 +585,57 @@ async function cleanupExpiredPhotos() {
 
 ---
 
+## Design Decisions
+
+This section documents clarifications for ambiguous requirements. These decisions should be referenced during implementation.
+
+### OCR & Data Entry
+
+| Decision | Choice | Rationale |
+|----------|--------|-----------|
+| OCR confidence threshold | <70% = low confidence | Highlight for user review; balances accuracy with usability |
+| Date required on submission | Yes, default to today | Pre-fill with today's date if OCR doesn't detect one |
+| Duplicate date handling | Prompt user: overwrite or keep both | Let user decide; prevents accidental data loss |
+| Scale value validation | Clamp to 1-5, flag for review | OCR might misread; auto-correct but highlight |
+| OCR total failure | Allow manual entry of all values | Show "OCR couldn't read card" with manual form fallback |
+| Photo upload size limit | No limit | Single user app; let phone compression and Azure handle it |
+| Text field length | No limit | Single user app; storage is cheap |
+
+### Streaks & Completion
+
+| Decision | Choice | Rationale |
+|----------|--------|-----------|
+| What counts as "completed" | At least 1 non-null value | Partial completion counts toward streak |
+| Completion rate period | Last 30 days | Reasonable window for progress view |
+| Deleted items in history | Show data, exclude from streaks | Preserve historical data; don't affect current metrics |
+| Digital vs analog streaks | Same rules | Both count equally toward streaks |
+
+### Inventory Management
+
+| Decision | Choice | Rationale |
+|----------|--------|-----------|
+| Reprint math | Additive (30 + 30 = 60 printed) | Simple, intuitive tracking |
+| Inventory floor | Cannot go negative | Floor at 0 if uploads exceed prints |
+| Manual adjustment | Allowed via API | For lost/discarded cards |
+
+### Error Handling
+
+| Decision | Choice | Rationale |
+|----------|--------|-----------|
+| Todoist API failures | Silent fail, log error | Don't block user flow; alert is nice-to-have |
+| Photo upload network errors | Retry with exponential backoff | Standard pattern; show "Retry" button after 3 fails |
+| Desktop without camera | Show "Choose from Library" only | Hide camera option if unavailable |
+
+### UI/UX
+
+| Decision | Choice | Rationale |
+|----------|--------|-----------|
+| Calendar colors | Green ≥80%, Yellow <80%, Empty = no entry | Red reserved for errors; empty is "missed" |
+| Print quantity limits | 1-100 per request | Reasonable bounds; prevents accidental large prints |
+| Photo signed URLs | 24-hour expiry, auth not required | Photos auto-delete anyway; simplifies implementation |
+
+---
+
 ## Appendix: Azure Resources Needed
 
 | Resource | SKU/Tier | Purpose | Est. Monthly Cost |
