@@ -9,7 +9,7 @@
     "start": "node dist/index.js",
     "start:func": "func start",
     "deploy:func": "func azure functionapp publish routine-tracker-api",
-    "clean": "rm -rf dist",
+    "clean": "rimraf dist",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src --ext .ts",
     "lint:fix": "eslint src --ext .ts --fix",

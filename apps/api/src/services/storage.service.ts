@@ -95,8 +95,8 @@ class AzureStorageService implements StorageService {
   async uploadPDF(buffer: Buffer, routineId: string): Promise<UploadResult> {
     const containerClient = this.blobServiceClient.getContainerClient(config.azureStorageContainerPdfs);
 
-    // Ensure container exists
-    await containerClient.createIfNotExists({ access: 'blob' });
+    // Ensure container exists (private - access via SAS tokens)
+    await containerClient.createIfNotExists();
 
     const blobName = `${routineId}/${uuidv4()}.pdf`;
     const blockBlobClient = containerClient.getBlockBlobClient(blobName);
@@ -105,14 +105,21 @@ class AzureStorageService implements StorageService {
       blobHTTPHeaders: { blobContentType: 'application/pdf' },
     });
 
-    return { url: blockBlobClient.url, blobName };
+    // Generate SAS URL with 24-hour expiration for secure access
+    const sasUrl = await this.generateSasUrl(
+      config.azureStorageContainerPdfs,
+      blobName,
+      24 * 60 * 60 // 24 hours in seconds
+    );
+
+    return { url: sasUrl, blobName };
   }
 
   async uploadPhoto(buffer: Buffer, routineId: string): Promise<UploadResult> {
     const containerClient = this.blobServiceClient.getContainerClient(config.azureStorageContainerPhotos);
 
-    // Ensure container exists
-    await containerClient.createIfNotExists({ access: 'blob' });
+    // Ensure container exists (private - access via SAS tokens)
+    await containerClient.createIfNotExists();
 
     const blobName = `${routineId}/${uuidv4()}.jpg`;
     const blockBlobClient = containerClient.getBlockBlobClient(blobName);
@@ -121,7 +128,14 @@ class AzureStorageService implements StorageService {
       blobHTTPHeaders: { blobContentType: 'image/jpeg' },
     });
 
-    return { url: blockBlobClient.url, blobName };
+    // Generate SAS URL with 24-hour expiration for secure access
+    const sasUrl = await this.generateSasUrl(
+      config.azureStorageContainerPhotos,
+      blobName,
+      24 * 60 * 60 // 24 hours in seconds
+    );
+
+    return { url: sasUrl, blobName };
   }
 
   async deleteBlob(containerName: string, blobName: string): Promise<boolean> {
