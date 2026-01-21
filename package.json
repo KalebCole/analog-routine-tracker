@@ -1,0 +1,38 @@
+{
+  "name": "analog-routine-tracker",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "turbo run dev",
+    "dev:web": "turbo run dev --filter=@analog-routine-tracker/web",
+    "dev:api": "turbo run dev --filter=@analog-routine-tracker/api",
+    "build": "turbo run build",
+    "build:web": "turbo run build --filter=@analog-routine-tracker/web",
+    "build:api": "turbo run build --filter=@analog-routine-tracker/api",
+    "lint": "turbo run lint",
+    "lint:fix": "turbo run lint:fix",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "test:web": "turbo run test --filter=@analog-routine-tracker/web",
+    "test:api": "turbo run test --filter=@analog-routine-tracker/api",
+    "db:migrate": "turbo run db:migrate --filter=@analog-routine-tracker/api",
+    "db:seed": "turbo run db:seed --filter=@analog-routine-tracker/api",
+    "clean": "turbo run clean && rm -rf node_modules"
+  },
+  "devDependencies": {
+    "turbo": "^2.0.0",
+    "typescript": "^5.4.0",
+    "prettier": "^3.2.0",
+    "eslint": "^8.57.0",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0"
+  },
+  "packageManager": "npm@10.2.0",
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
