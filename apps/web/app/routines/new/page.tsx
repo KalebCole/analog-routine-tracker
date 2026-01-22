@@ -7,11 +7,8 @@ import { ArrowLeft, Plus, Loader2, FolderPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  ItemEditor,
-  ItemInput,
-  isGroupItemInput,
-} from '@/components/item-editor';
+import { ItemInput, isGroupItemInput } from '@/components/item-editor';
+import { SortableItemList } from '@/components/sortable-item-list';
 import { useToast } from '@/hooks/use-toast';
 import { api } from '@/lib/api';
 import {
@@ -191,17 +188,12 @@ export default function NewRoutinePage() {
             </span>
           </div>
 
-          <div className="space-y-2">
-            {items.map((item, index) => (
-              <ItemEditor
-                key={index}
-                item={item}
-                index={index}
-                onChange={updateItem}
-                onDelete={deleteItem}
-              />
-            ))}
-          </div>
+          <SortableItemList
+            items={items}
+            onItemsChange={setItems}
+            onItemChange={updateItem}
+            onItemDelete={deleteItem}
+          />
 
           <div className="flex gap-2">
             <Button

@@ -7,6 +7,22 @@ import {
   LeafItemInput,
   GroupItemInput,
 } from '@analog-routine-tracker/shared';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  MouseSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  arrayMove,
+} from '@dnd-kit/sortable';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -26,6 +42,7 @@ import {
   Plus,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { SortableItem, DragHandleProps } from './sortable-item';
 
 // Re-export for backwards compatibility
 export type ItemInput = LeafItemInput | GroupItemInput;
@@ -35,12 +52,16 @@ function isGroupItemInput(item: ItemInput): item is GroupItemInput {
   return item.type === 'group';
 }
 
+interface SortableDragHandleProps extends React.HTMLAttributes<HTMLButtonElement> {
+  ref?: (node: HTMLElement | null) => void;
+}
+
 interface LeafItemEditorProps {
   item: LeafItemInput;
   index: number;
   onChange: (index: number, item: LeafItemInput) => void;
   onDelete: (index: number) => void;
-  dragHandleProps?: React.HTMLAttributes<HTMLButtonElement>;
+  dragHandleProps?: SortableDragHandleProps;
   isNested?: boolean;
 }
 
@@ -49,7 +70,7 @@ interface GroupItemEditorProps {
   index: number;
   onChange: (index: number, item: GroupItemInput) => void;
   onDelete: (index: number) => void;
-  dragHandleProps?: React.HTMLAttributes<HTMLButtonElement>;
+  dragHandleProps?: SortableDragHandleProps;
 }
 
 interface ItemEditorProps {
@@ -57,7 +78,7 @@ interface ItemEditorProps {
   index: number;
   onChange: (index: number, item: ItemInput) => void;
   onDelete: (index: number) => void;
-  dragHandleProps?: React.HTMLAttributes<HTMLButtonElement>;
+  dragHandleProps?: SortableDragHandleProps;
   isNested?: boolean;
 }
 
@@ -104,7 +125,8 @@ function LeafItemEditor({
       <button
         type="button"
         className="p-1 cursor-grab hover:bg-accent rounded touch-none"
-        {...dragHandleProps}
+        ref={dragHandleProps?.ref}
+        {...(dragHandleProps && { ...dragHandleProps, ref: undefined })}
       >
         <GripVertical className="h-4 w-4 text-muted-foreground" />
       </button>
@@ -201,6 +223,23 @@ function GroupItemEditor({
 }: GroupItemEditorProps) {
   const [isExpanded, setIsExpanded] = useState(true);
 
+  const sensors = useSensors(
+    useSensor(MouseSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: {
+        delay: 200,
+        tolerance: 5,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
   const handleNameChange = (name: string) => {
     onChange(index, { ...item, name });
   };
@@ -221,6 +260,25 @@ function GroupItemEditor({
     }
   };
 
+  const handleChildDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (over && active.id !== over.id) {
+      const childIds = item.children.map((_, idx) => `${index}-child-${idx}`);
+      const oldIndex = childIds.indexOf(active.id as string);
+      const newIndex = childIds.indexOf(over.id as string);
+
+      if (oldIndex !== -1 && newIndex !== -1) {
+        const reorderedChildren = arrayMove(item.children, oldIndex, newIndex);
+        const updatedChildren = reorderedChildren.map((child, idx) => ({
+          ...child,
+          order: idx,
+        }));
+        onChange(index, { ...item, children: updatedChildren });
+      }
+    }
+  };
+
   const addChild = () => {
     const newChild: LeafItemInput = {
       name: '',
@@ -234,6 +292,7 @@ function GroupItemEditor({
   };
 
   const completedCount = item.children.length;
+  const childIds = item.children.map((_, idx) => `${index}-child-${idx}`);
 
   return (
     <div className="border rounded-lg bg-card overflow-hidden">
@@ -242,7 +301,8 @@ function GroupItemEditor({
         <button
           type="button"
           className="p-1 cursor-grab hover:bg-accent rounded touch-none"
-          {...dragHandleProps}
+          ref={dragHandleProps?.ref}
+          {...(dragHandleProps && { ...dragHandleProps, ref: undefined })}
         >
           <GripVertical className="h-4 w-4 text-muted-foreground" />
         </button>
@@ -291,16 +351,38 @@ function GroupItemEditor({
       {/* Group children */}
       {isExpanded && (
         <div className="p-3 space-y-2">
-          {item.children.map((child, childIndex) => (
-            <LeafItemEditor
-              key={childIndex}
-              item={child}
-              index={childIndex}
-              onChange={handleChildChange}
-              onDelete={handleChildDelete}
-              isNested
-            />
-          ))}
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleChildDragEnd}
+          >
+            <SortableContext
+              items={childIds}
+              strategy={verticalListSortingStrategy}
+            >
+              {item.children.map((child, childIndex) => (
+                <SortableItem
+                  key={`${index}-child-${childIndex}`}
+                  id={`${index}-child-${childIndex}`}
+                >
+                  {(childDragHandleProps: DragHandleProps) => (
+                    <LeafItemEditor
+                      item={child}
+                      index={childIndex}
+                      onChange={handleChildChange}
+                      onDelete={handleChildDelete}
+                      dragHandleProps={{
+                        ref: childDragHandleProps.ref,
+                        ...childDragHandleProps.listeners,
+                        ...childDragHandleProps.attributes,
+                      }}
+                      isNested
+                    />
+                  )}
+                </SortableItem>
+              ))}
+            </SortableContext>
+          </DndContext>
 
           <Button
             type="button"
