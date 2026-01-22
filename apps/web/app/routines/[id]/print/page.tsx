@@ -31,6 +31,7 @@ export default function PrintRoutinePage({ params }: PageProps) {
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPrintConfirmed, setIsPrintConfirmed] = useState(false);
+  const [generatedLayout, setGeneratedLayout] = useState<CardLayout | null>(null);
 
   // Fetch print options
   useEffect(() => {
@@ -56,6 +57,16 @@ export default function PrintRoutinePage({ params }: PageProps) {
     }
   }, [id]);
 
+  // Clear PDF when layout changes to allow easy regeneration
+  useEffect(() => {
+    if (pdfUrl && generatedLayout && selectedLayout !== generatedLayout) {
+      setPdfUrl(null);
+      setGenerationResult(null);
+      setIsPrintConfirmed(false);
+      setGeneratedLayout(null);
+    }
+  }, [selectedLayout, pdfUrl, generatedLayout]);
+
   const handleGeneratePDF = async () => {
     try {
       setIsGenerating(true);
@@ -74,6 +85,7 @@ export default function PrintRoutinePage({ params }: PageProps) {
         pagesGenerated: result.pagesGenerated,
         cardsPerPage: result.cardsPerPage,
       });
+      setGeneratedLayout(selectedLayout);
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.message);
@@ -343,6 +355,7 @@ export default function PrintRoutinePage({ params }: PageProps) {
             setPdfUrl(null);
             setGenerationResult(null);
             setIsPrintConfirmed(false);
+            setGeneratedLayout(null);
           }}
         >
           Generate Another PDF
