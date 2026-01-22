@@ -3,13 +3,69 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Plus, Loader2 } from 'lucide-react';
+import { ArrowLeft, Plus, Loader2, FolderPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ItemEditor, ItemInput } from '@/components/item-editor';
+import {
+  ItemEditor,
+  ItemInput,
+  isGroupItemInput,
+} from '@/components/item-editor';
 import { useToast } from '@/hooks/use-toast';
 import { api } from '@/lib/api';
+import {
+  LeafItemInput,
+  GroupItemInput,
+  countTotalItems,
+} from '@analog-routine-tracker/shared';
+
+// Helper to count total items including group children
+function countItems(items: ItemInput[]): number {
+  return countTotalItems(items as any);
+}
+
+// Helper to clean/validate items for submission
+function prepareItemsForSubmission(
+  items: ItemInput[]
+): (LeafItemInput | GroupItemInput)[] {
+  return items
+    .filter((item) => {
+      if (isGroupItemInput(item)) {
+        // Group must have a name and at least one child with a name
+        return (
+          item.name.trim() &&
+          item.children.some((child) => child.name.trim())
+        );
+      }
+      return item.name.trim();
+    })
+    .map((item, index) => {
+      if (isGroupItemInput(item)) {
+        return {
+          name: item.name.trim(),
+          type: 'group' as const,
+          order: index,
+          children: item.children
+            .filter((child) => child.name.trim())
+            .map((child, childIndex) => ({
+              name: child.name.trim(),
+              type: child.type,
+              unit: child.unit,
+              hasNotes: child.hasNotes,
+              order: childIndex,
+            })),
+        };
+      }
+      return {
+        name: item.name.trim(),
+        type: item.type,
+        unit: item.unit,
+        hasNotes: item.hasNotes,
+        order: index,
+      } as LeafItemInput;
+    });
+}
 
 export default function NewRoutinePage() {
   const router = useRouter();
@@ -25,6 +81,16 @@ export default function NewRoutinePage() {
       ...items,
       { name: '', type: 'checkbox', order: items.length },
     ]);
+  };
+
+  const addGroup = () => {
+    const newGroup: GroupItemInput = {
+      name: '',
+      type: 'group',
+      order: items.length,
+      children: [{ name: '', type: 'checkbox', order: 0 }],
+    };
+    setItems([...items, newGroup]);
   };
 
   const updateItem = (index: number, item: ItemInput) => {
@@ -58,7 +124,7 @@ export default function NewRoutinePage() {
       return;
     }
 
-    const validItems = items.filter((item) => item.name.trim());
+    const validItems = prepareItemsForSubmission(items);
     if (validItems.length === 0) {
       toast({
         title: 'No items',
@@ -72,13 +138,7 @@ export default function NewRoutinePage() {
       setIsSubmitting(true);
       const routine = await api.createRoutine({
         name: name.trim(),
-        items: validItems.map(({ name, type, unit, hasNotes, order }) => ({
-          name: name.trim(),
-          type,
-          unit,
-          hasNotes,
-          order,
-        })),
+        items: validItems,
       });
 
       toast({
@@ -97,6 +157,8 @@ export default function NewRoutinePage() {
       setIsSubmitting(false);
     }
   };
+
+  const totalItems = countItems(items);
 
   return (
     <div className="container max-w-2xl py-6 px-4">
@@ -125,7 +187,7 @@ export default function NewRoutinePage() {
           <div className="flex items-center justify-between">
             <Label>Items</Label>
             <span className="text-sm text-muted-foreground">
-              {items.length} item{items.length !== 1 ? 's' : ''}
+              {totalItems} total item{totalItems !== 1 ? 's' : ''}
             </span>
           </div>
 
@@ -141,16 +203,28 @@ export default function NewRoutinePage() {
             ))}
           </div>
 
-          <Button
-            type="button"
-            variant="outline"
-            className="w-full"
-            onClick={addItem}
-            disabled={isSubmitting}
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Add Item
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="flex-1"
+              onClick={addItem}
+              disabled={isSubmitting}
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Add Item
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="flex-1"
+              onClick={addGroup}
+              disabled={isSubmitting}
+            >
+              <FolderPlus className="h-4 w-4 mr-2" />
+              Add Group
+            </Button>
+          </div>
         </div>
 
         <div className="flex gap-3 pt-4">

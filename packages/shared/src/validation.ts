@@ -1,42 +1,94 @@
 import { z } from 'zod';
 
-// Item type enum
-export const itemTypeSchema = z.enum(['checkbox', 'number', 'scale', 'text']);
+// Item type enums
+export const leafItemTypeSchema = z.enum(['checkbox', 'number', 'scale', 'text']);
+export const itemTypeSchema = z.enum(['checkbox', 'number', 'scale', 'text', 'group']);
 
-// Item schema
-export const itemSchema = z.object({
+// Leaf item schema (non-group items)
+export const leafItemSchema = z.object({
   id: z.string().uuid(),
   name: z.string().min(1).max(100),
-  type: itemTypeSchema,
+  type: leafItemTypeSchema,
   unit: z.string().max(20).optional(),
   hasNotes: z.boolean().optional(),
   order: z.number().int().min(0),
 });
 
-// Item without ID (for creation)
-export const createItemSchema = itemSchema.omit({ id: true });
+// Group item schema (with nested children)
+export const groupItemSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string().min(1).max(100),
+  type: z.literal('group'),
+  children: z.array(leafItemSchema).min(1).max(20),
+  order: z.number().int().min(0),
+});
+
+// Union of leaf and group items
+export const itemSchema = z.discriminatedUnion('type', [
+  leafItemSchema.extend({ type: z.literal('checkbox') }),
+  leafItemSchema.extend({ type: z.literal('number') }),
+  leafItemSchema.extend({ type: z.literal('scale') }),
+  leafItemSchema.extend({ type: z.literal('text') }),
+  groupItemSchema,
+]);
+
+// Leaf item without ID (for creation)
+export const createLeafItemSchema = leafItemSchema.omit({ id: true });
+
+// Group item without IDs (for creation)
+export const createGroupItemSchema = z.object({
+  name: z.string().min(1).max(100),
+  type: z.literal('group'),
+  children: z.array(createLeafItemSchema).min(1).max(20),
+  order: z.number().int().min(0),
+});
+
+// Item without ID (for creation) - discriminated union
+export const createItemSchema = z.discriminatedUnion('type', [
+  createLeafItemSchema.extend({ type: z.literal('checkbox') }),
+  createLeafItemSchema.extend({ type: z.literal('number') }),
+  createLeafItemSchema.extend({ type: z.literal('scale') }),
+  createLeafItemSchema.extend({ type: z.literal('text') }),
+  createGroupItemSchema,
+]);
+
+// Helper to count total items including children
+function countItems(items: z.infer<typeof createItemSchema>[]): number {
+  return items.reduce((count, item) => {
+    if (item.type === 'group') {
+      return count + 1 + item.children.length;
+    }
+    return count + 1;
+  }, 0);
+}
 
 // Routine schema
 export const routineSchema = z.object({
   id: z.string().uuid(),
   name: z.string().min(1).max(100),
-  items: z.array(itemSchema).min(1).max(30),
+  items: z.array(itemSchema).min(1).max(50),
   version: z.number().int().positive(),
   createdAt: z.date(),
   modifiedAt: z.date(),
 });
 
-// Create routine request
+// Create routine request with total item count validation
 export const createRoutineSchema = z.object({
   name: z.string().min(1).max(100),
-  items: z.array(createItemSchema).min(1).max(30),
-});
+  items: z.array(createItemSchema).min(1).max(50),
+}).refine(
+  (data) => countItems(data.items) <= 50,
+  { message: 'Total number of items (including group children) cannot exceed 50', path: ['items'] }
+);
 
-// Update routine request
+// Update routine request with total item count validation
 export const updateRoutineSchema = z.object({
   name: z.string().min(1).max(100).optional(),
-  items: z.array(createItemSchema).min(1).max(30).optional(),
-});
+  items: z.array(createItemSchema).min(1).max(50).optional(),
+}).refine(
+  (data) => !data.items || countItems(data.items) <= 50,
+  { message: 'Total number of items (including group children) cannot exceed 50', path: ['items'] }
+);
 
 // Value schemas for each item type
 export const checkboxValueSchema = z.boolean();

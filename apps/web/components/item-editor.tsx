@@ -1,6 +1,12 @@
 'use client';
 
-import { ItemType } from '@analog-routine-tracker/shared';
+import { useState } from 'react';
+import {
+  ItemType,
+  LeafItemType,
+  LeafItemInput,
+  GroupItemInput,
+} from '@analog-routine-tracker/shared';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -12,14 +18,38 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Trash2, GripVertical } from 'lucide-react';
+import {
+  Trash2,
+  GripVertical,
+  ChevronDown,
+  ChevronRight,
+  Plus,
+} from 'lucide-react';
+import { cn } from '@/lib/utils';
 
-export interface ItemInput {
-  name: string;
-  type: ItemType;
-  unit?: string;
-  hasNotes?: boolean;
-  order: number;
+// Re-export for backwards compatibility
+export type ItemInput = LeafItemInput | GroupItemInput;
+
+// Type guard
+function isGroupItemInput(item: ItemInput): item is GroupItemInput {
+  return item.type === 'group';
+}
+
+interface LeafItemEditorProps {
+  item: LeafItemInput;
+  index: number;
+  onChange: (index: number, item: LeafItemInput) => void;
+  onDelete: (index: number) => void;
+  dragHandleProps?: React.HTMLAttributes<HTMLButtonElement>;
+  isNested?: boolean;
+}
+
+interface GroupItemEditorProps {
+  item: GroupItemInput;
+  index: number;
+  onChange: (index: number, item: GroupItemInput) => void;
+  onDelete: (index: number) => void;
+  dragHandleProps?: React.HTMLAttributes<HTMLButtonElement>;
 }
 
 interface ItemEditorProps {
@@ -28,31 +58,49 @@ interface ItemEditorProps {
   onChange: (index: number, item: ItemInput) => void;
   onDelete: (index: number) => void;
   dragHandleProps?: React.HTMLAttributes<HTMLButtonElement>;
+  isNested?: boolean;
 }
 
-const itemTypeLabels: Record<ItemType, string> = {
+const leafItemTypeLabels: Record<LeafItemType, string> = {
   checkbox: 'Checkbox',
   number: 'Number',
   scale: 'Scale (1-5)',
   text: 'Text',
 };
 
-export function ItemEditor({
+const itemTypeLabels: Record<ItemType, string> = {
+  ...leafItemTypeLabels,
+  group: 'Group',
+};
+
+/**
+ * Editor for leaf items (non-group items)
+ */
+function LeafItemEditor({
   item,
   index,
   onChange,
   onDelete,
   dragHandleProps,
-}: ItemEditorProps) {
-  const handleChange = <K extends keyof ItemInput>(
+  isNested = false,
+}: LeafItemEditorProps) {
+  const handleChange = <K extends keyof LeafItemInput>(
     field: K,
-    value: ItemInput[K]
+    value: LeafItemInput[K]
   ) => {
     onChange(index, { ...item, [field]: value });
   };
 
+  // Nested items can only be leaf types
+  const typeOptions = leafItemTypeLabels;
+
   return (
-    <div className="flex items-start gap-2 p-3 border rounded-lg bg-card">
+    <div
+      className={cn(
+        'flex items-start gap-2 p-3 border rounded-lg bg-card',
+        isNested && 'ml-6 border-dashed'
+      )}
+    >
       <button
         type="button"
         className="p-1 cursor-grab hover:bg-accent rounded touch-none"
@@ -77,13 +125,15 @@ export function ItemEditor({
             <Label htmlFor={`item-type-${index}`}>Type</Label>
             <Select
               value={item.type}
-              onValueChange={(value) => handleChange('type', value as ItemType)}
+              onValueChange={(value) =>
+                handleChange('type', value as LeafItemType)
+              }
             >
               <SelectTrigger id={`item-type-${index}`}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {Object.entries(itemTypeLabels).map(([value, label]) => (
+                {Object.entries(typeOptions).map(([value, label]) => (
                   <SelectItem key={value} value={value}>
                     {label}
                   </SelectItem>
@@ -131,9 +181,177 @@ export function ItemEditor({
         size="icon"
         className="text-muted-foreground hover:text-destructive"
         onClick={() => onDelete(index)}
+        aria-label="Delete item"
       >
         <Trash2 className="h-4 w-4" />
       </Button>
     </div>
   );
 }
+
+/**
+ * Editor for group items (contains nested leaf items)
+ */
+function GroupItemEditor({
+  item,
+  index,
+  onChange,
+  onDelete,
+  dragHandleProps,
+}: GroupItemEditorProps) {
+  const [isExpanded, setIsExpanded] = useState(true);
+
+  const handleNameChange = (name: string) => {
+    onChange(index, { ...item, name });
+  };
+
+  const handleChildChange = (childIndex: number, child: LeafItemInput) => {
+    const newChildren = [...item.children];
+    newChildren[childIndex] = child;
+    onChange(index, { ...item, children: newChildren });
+  };
+
+  const handleChildDelete = (childIndex: number) => {
+    const newChildren = item.children.filter((_, i) => i !== childIndex);
+    // If no children left, delete the group
+    if (newChildren.length === 0) {
+      onDelete(index);
+    } else {
+      onChange(index, { ...item, children: newChildren });
+    }
+  };
+
+  const addChild = () => {
+    const newChild: LeafItemInput = {
+      name: '',
+      type: 'checkbox',
+      order: item.children.length,
+    };
+    onChange(index, {
+      ...item,
+      children: [...item.children, newChild],
+    });
+  };
+
+  const completedCount = item.children.length;
+
+  return (
+    <div className="border rounded-lg bg-card overflow-hidden">
+      {/* Group header */}
+      <div className="flex items-center gap-2 p-3 bg-muted/50">
+        <button
+          type="button"
+          className="p-1 cursor-grab hover:bg-accent rounded touch-none"
+          {...dragHandleProps}
+        >
+          <GripVertical className="h-4 w-4 text-muted-foreground" />
+        </button>
+
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-6 w-6"
+          onClick={() => setIsExpanded(!isExpanded)}
+        >
+          {isExpanded ? (
+            <ChevronDown className="h-4 w-4" />
+          ) : (
+            <ChevronRight className="h-4 w-4" />
+          )}
+        </Button>
+
+        <div className="flex-1 flex items-center gap-3">
+          <Input
+            value={item.name}
+            onChange={(e) => handleNameChange(e.target.value)}
+            placeholder="Group name"
+            className="max-w-[250px] bg-background"
+          />
+          <span className="text-xs text-muted-foreground">
+            {completedCount} {completedCount === 1 ? 'item' : 'items'}
+          </span>
+          <span className="text-xs font-medium text-primary bg-primary/10 px-2 py-0.5 rounded">
+            Group
+          </span>
+        </div>
+
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="text-muted-foreground hover:text-destructive"
+          onClick={() => onDelete(index)}
+          aria-label="Delete group"
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      </div>
+
+      {/* Group children */}
+      {isExpanded && (
+        <div className="p-3 space-y-2">
+          {item.children.map((child, childIndex) => (
+            <LeafItemEditor
+              key={childIndex}
+              item={child}
+              index={childIndex}
+              onChange={handleChildChange}
+              onDelete={handleChildDelete}
+              isNested
+            />
+          ))}
+
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="w-full mt-2"
+            onClick={addChild}
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Add item to group
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Main item editor that handles both leaf and group items
+ */
+export function ItemEditor({
+  item,
+  index,
+  onChange,
+  onDelete,
+  dragHandleProps,
+  isNested = false,
+}: ItemEditorProps) {
+  if (isGroupItemInput(item)) {
+    return (
+      <GroupItemEditor
+        item={item}
+        index={index}
+        onChange={onChange as (index: number, item: GroupItemInput) => void}
+        onDelete={onDelete}
+        dragHandleProps={dragHandleProps}
+      />
+    );
+  }
+
+  return (
+    <LeafItemEditor
+      item={item}
+      index={index}
+      onChange={onChange as (index: number, item: LeafItemInput) => void}
+      onDelete={onDelete}
+      dragHandleProps={dragHandleProps}
+      isNested={isNested}
+    />
+  );
+}
+
+// Export types and labels for use in other components
+export { itemTypeLabels, leafItemTypeLabels, isGroupItemInput };

@@ -3,17 +3,101 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Plus, Loader2 } from 'lucide-react';
+import { ArrowLeft, Plus, Loader2, FolderPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ItemEditor, ItemInput } from '@/components/item-editor';
+import {
+  ItemEditor,
+  ItemInput,
+  isGroupItemInput,
+} from '@/components/item-editor';
 import { useRoutine } from '@/hooks/use-routine';
 import { useToast } from '@/hooks/use-toast';
 import { api } from '@/lib/api';
+import {
+  Item,
+  LeafItemInput,
+  GroupItemInput,
+  isGroupItem,
+  countTotalItems,
+} from '@analog-routine-tracker/shared';
 
 interface PageProps {
   params: { id: string };
+}
+
+// Convert Item[] from API to ItemInput[] for the form
+function convertItemsToInputs(items: Item[]): ItemInput[] {
+  return items.map((item): ItemInput => {
+    if (isGroupItem(item)) {
+      return {
+        name: item.name,
+        type: 'group',
+        order: item.order,
+        children: item.children.map((child) => ({
+          name: child.name,
+          type: child.type,
+          unit: child.unit,
+          hasNotes: child.hasNotes,
+          order: child.order,
+        })),
+      };
+    }
+    return {
+      name: item.name,
+      type: item.type,
+      unit: item.unit,
+      hasNotes: item.hasNotes,
+      order: item.order,
+    };
+  });
+}
+
+// Helper to count total items including group children
+function countItems(items: ItemInput[]): number {
+  return countTotalItems(items as Item[]);
+}
+
+// Helper to clean/validate items for submission
+function prepareItemsForSubmission(
+  items: ItemInput[]
+): (LeafItemInput | GroupItemInput)[] {
+  return items
+    .filter((item) => {
+      if (isGroupItemInput(item)) {
+        return (
+          item.name.trim() &&
+          item.children.some((child) => child.name.trim())
+        );
+      }
+      return item.name.trim();
+    })
+    .map((item, index) => {
+      if (isGroupItemInput(item)) {
+        return {
+          name: item.name.trim(),
+          type: 'group' as const,
+          order: index,
+          children: item.children
+            .filter((child) => child.name.trim())
+            .map((child, childIndex) => ({
+              name: child.name.trim(),
+              type: child.type,
+              unit: child.unit,
+              hasNotes: child.hasNotes,
+              order: childIndex,
+            })),
+        };
+      }
+      return {
+        name: item.name.trim(),
+        type: item.type,
+        unit: item.unit,
+        hasNotes: item.hasNotes,
+        order: index,
+      } as LeafItemInput;
+    });
 }
 
 export default function EditRoutinePage({ params }: PageProps) {
@@ -30,15 +114,7 @@ export default function EditRoutinePage({ params }: PageProps) {
   useEffect(() => {
     if (routine && !initialized) {
       setName(routine.name);
-      setItems(
-        routine.items.map((item) => ({
-          name: item.name,
-          type: item.type,
-          unit: item.unit,
-          hasNotes: item.hasNotes,
-          order: item.order,
-        }))
-      );
+      setItems(convertItemsToInputs(routine.items));
       setInitialized(true);
     }
   }, [routine, initialized]);
@@ -48,6 +124,16 @@ export default function EditRoutinePage({ params }: PageProps) {
       ...items,
       { name: '', type: 'checkbox', order: items.length },
     ]);
+  };
+
+  const addGroup = () => {
+    const newGroup: GroupItemInput = {
+      name: '',
+      type: 'group',
+      order: items.length,
+      children: [{ name: '', type: 'checkbox', order: 0 }],
+    };
+    setItems([...items, newGroup]);
   };
 
   const updateItem = (index: number, item: ItemInput) => {
@@ -81,7 +167,7 @@ export default function EditRoutinePage({ params }: PageProps) {
       return;
     }
 
-    const validItems = items.filter((item) => item.name.trim());
+    const validItems = prepareItemsForSubmission(items);
     if (validItems.length === 0) {
       toast({
         title: 'No items',
@@ -95,18 +181,13 @@ export default function EditRoutinePage({ params }: PageProps) {
       setIsSubmitting(true);
       await api.updateRoutine(id, {
         name: name.trim(),
-        items: validItems.map(({ name, type, unit, hasNotes, order }) => ({
-          name: name.trim(),
-          type,
-          unit,
-          hasNotes,
-          order,
-        })),
+        items: validItems,
       });
 
       toast({
         title: 'Routine updated',
-        description: 'Your routine has been updated. A new version snapshot was created.',
+        description:
+          'Your routine has been updated. A new version snapshot was created.',
       });
 
       router.push(`/routines/${id}`);
@@ -149,6 +230,8 @@ export default function EditRoutinePage({ params }: PageProps) {
     );
   }
 
+  const totalItems = countItems(items);
+
   return (
     <div className="container max-w-2xl py-6 px-4">
       <header className="flex items-center gap-4 mb-6">
@@ -162,8 +245,8 @@ export default function EditRoutinePage({ params }: PageProps) {
 
       <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
         <p className="text-sm text-yellow-800">
-          <strong>Note:</strong> Editing items will create a new version. Previously printed cards
-          will still work with their original version.
+          <strong>Note:</strong> Editing items will create a new version.
+          Previously printed cards will still work with their original version.
         </p>
       </div>
 
@@ -183,7 +266,7 @@ export default function EditRoutinePage({ params }: PageProps) {
           <div className="flex items-center justify-between">
             <Label>Items</Label>
             <span className="text-sm text-muted-foreground">
-              {items.length} item{items.length !== 1 ? 's' : ''}
+              {totalItems} total item{totalItems !== 1 ? 's' : ''}
             </span>
           </div>
 
@@ -199,16 +282,28 @@ export default function EditRoutinePage({ params }: PageProps) {
             ))}
           </div>
 
-          <Button
-            type="button"
-            variant="outline"
-            className="w-full"
-            onClick={addItem}
-            disabled={isSubmitting}
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Add Item
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="flex-1"
+              onClick={addItem}
+              disabled={isSubmitting}
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Add Item
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="flex-1"
+              onClick={addGroup}
+              disabled={isSubmitting}
+            >
+              <FolderPlus className="h-4 w-4 mr-2" />
+              Add Group
+            </Button>
+          </div>
         </div>
 
         <div className="flex gap-3 pt-4">

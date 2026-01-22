@@ -41,8 +41,20 @@ LINE_HEIGHT = 18  # points for text items
 GRAY = Color(0.7, 0.7, 0.7)
 
 
-def suggest_layout(item_count):
-    """Determine layout based on item count."""
+def count_total_items(items):
+    """Count total items including children of groups."""
+    total = 0
+    for item in items:
+        if item.get('type') == 'group':
+            total += 1 + len(item.get('children', []))
+        else:
+            total += 1
+    return total
+
+
+def suggest_layout(items):
+    """Determine layout based on total item count including group children."""
+    item_count = count_total_items(items)
     if item_count <= 8:
         return 'quarter'
     elif item_count <= 15:
@@ -117,7 +129,9 @@ class CardRenderer:
 
             item_type = item['type']
 
-            if item_type == 'checkbox':
+            if item_type == 'group':
+                self._draw_group_item(content_x, content_width, item, min_y)
+            elif item_type == 'checkbox':
                 self._draw_checkbox_item(content_x, item)
             elif item_type == 'number':
                 self._draw_number_item(content_x, item)
@@ -125,6 +139,41 @@ class CardRenderer:
                 self._draw_scale_item(content_x, content_width, item)
             elif item_type == 'text':
                 self._draw_text_item(content_x, content_width, item)
+
+    def _draw_group_item(self, x, content_width, item, min_y):
+        """Draw a group header and its nested children."""
+        # Draw group header
+        self.c.setFont("Helvetica-Bold", 11)
+        self.c.setFillColor(black)
+        self.c.drawString(x, self.current_y - 8, item['name'])
+
+        # Draw a subtle underline for the group header
+        self.c.setStrokeColor(GRAY)
+        self.c.setLineWidth(0.5)
+        self.c.line(x, self.current_y - 12, x + content_width, self.current_y - 12)
+        self.c.setStrokeColor(black)
+
+        self.current_y -= 20
+
+        # Draw children with indentation
+        indent = 16  # pixels to indent children
+        indented_x = x + indent
+        indented_width = content_width - indent
+
+        for child in sorted(item.get('children', []), key=lambda x: x.get('order', 0)):
+            if self.current_y < min_y:
+                break
+
+            child_type = child['type']
+
+            if child_type == 'checkbox':
+                self._draw_checkbox_item(indented_x, child)
+            elif child_type == 'number':
+                self._draw_number_item(indented_x, child)
+            elif child_type == 'scale':
+                self._draw_scale_item(indented_x, indented_width, child)
+            elif child_type == 'text':
+                self._draw_text_item(indented_x, indented_width, child)
 
     def _draw_checkbox_item(self, x, item):
         """Draw a checkbox item."""
@@ -325,7 +374,7 @@ def main():
     # Determine layout
     layout = args.layout
     if layout == 'auto':
-        layout = suggest_layout(len(items))
+        layout = suggest_layout(items)
 
     # Build routine object
     routine = {

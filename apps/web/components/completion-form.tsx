@@ -1,12 +1,20 @@
 'use client';
 
 import { useState } from 'react';
-import { Item, ItemValue, ItemType } from '@analog-routine-tracker/shared';
+import {
+  Item,
+  LeafItem,
+  ItemValue,
+  LeafItemType,
+  isGroupItem,
+  flattenItems,
+} from '@analog-routine-tracker/shared';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 
 interface CompletionFormProps {
   items: Item[];
@@ -21,11 +29,14 @@ export function CompletionForm({
   onSubmit,
   isSubmitting = false,
 }: CompletionFormProps) {
+  // Flatten items to get all leaf items
+  const leafItems = flattenItems(items);
+
   // Initialize values from props or defaults
   const [values, setValues] = useState<Record<string, ItemValue>>(() => {
     const initial: Record<string, ItemValue> = {};
 
-    for (const item of items) {
+    for (const item of leafItems) {
       const existingValue = initialValues.find((v) => v.itemId === item.id);
       if (existingValue) {
         initial[item.id] = existingValue;
@@ -56,15 +67,30 @@ export function CompletionForm({
     <form onSubmit={handleSubmit} className="space-y-4">
       {items
         .sort((a, b) => a.order - b.order)
-        .map((item) => (
-          <ItemInput
-            key={item.id}
-            item={item}
-            value={values[item.id]?.value}
-            onChange={(value) => updateValue(item.id, value)}
-            disabled={isSubmitting}
-          />
-        ))}
+        .map((item) => {
+          if (isGroupItem(item)) {
+            return (
+              <GroupSection
+                key={item.id}
+                groupName={item.name}
+                children={item.children}
+                values={values}
+                onValueChange={updateValue}
+                disabled={isSubmitting}
+              />
+            );
+          }
+
+          return (
+            <LeafItemInput
+              key={item.id}
+              item={item}
+              value={values[item.id]?.value}
+              onChange={(value) => updateValue(item.id, value)}
+              disabled={isSubmitting}
+            />
+          );
+        })}
 
       <Button type="submit" className="w-full" disabled={isSubmitting}>
         {isSubmitting ? 'Saving...' : 'Save Completion'}
@@ -73,7 +99,76 @@ export function CompletionForm({
   );
 }
 
-function getDefaultValue(type: ItemType): ItemValue['value'] {
+interface GroupSectionProps {
+  groupName: string;
+  children: LeafItem[];
+  values: Record<string, ItemValue>;
+  onValueChange: (itemId: string, value: ItemValue['value']) => void;
+  disabled?: boolean;
+}
+
+function GroupSection({
+  groupName,
+  children,
+  values,
+  onValueChange,
+  disabled,
+}: GroupSectionProps) {
+  const [isExpanded, setIsExpanded] = useState(true);
+
+  // Calculate completion progress
+  const completedCount = children.filter((child) => {
+    const value = values[child.id]?.value;
+    if (value === null || value === undefined) return false;
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'number') return true;
+    if (typeof value === 'string') return value.length > 0;
+    if (typeof value === 'object' && value !== null) return true;
+    return false;
+  }).length;
+
+  return (
+    <div className="border rounded-lg overflow-hidden">
+      {/* Group header */}
+      <button
+        type="button"
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="w-full flex items-center gap-3 p-3 bg-muted/50 hover:bg-muted transition-colors"
+      >
+        {isExpanded ? (
+          <ChevronDown className="h-4 w-4 text-muted-foreground" />
+        ) : (
+          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+        )}
+        <span className="font-medium flex-1 text-left">{groupName}</span>
+        <span className="text-sm text-muted-foreground">
+          {completedCount}/{children.length}
+        </span>
+      </button>
+
+      {/* Group children */}
+      {isExpanded && (
+        <div className="p-2 space-y-2 bg-background">
+          {children
+            .sort((a, b) => a.order - b.order)
+            .map((child) => (
+              <div key={child.id} className="ml-4">
+                <LeafItemInput
+                  item={child}
+                  value={values[child.id]?.value}
+                  onChange={(value) => onValueChange(child.id, value)}
+                  disabled={disabled}
+                  isNested
+                />
+              </div>
+            ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function getDefaultValue(type: LeafItemType): ItemValue['value'] {
   switch (type) {
     case 'checkbox':
       return false;
@@ -86,14 +181,21 @@ function getDefaultValue(type: ItemType): ItemValue['value'] {
   }
 }
 
-interface ItemInputProps {
-  item: Item;
+interface LeafItemInputProps {
+  item: LeafItem;
   value: ItemValue['value'];
   onChange: (value: ItemValue['value']) => void;
   disabled?: boolean;
+  isNested?: boolean;
 }
 
-function ItemInput({ item, value, onChange, disabled }: ItemInputProps) {
+function LeafItemInput({
+  item,
+  value,
+  onChange,
+  disabled,
+  isNested = false,
+}: LeafItemInputProps) {
   switch (item.type) {
     case 'checkbox':
       return (
@@ -102,6 +204,7 @@ function ItemInput({ item, value, onChange, disabled }: ItemInputProps) {
           value={value as boolean}
           onChange={onChange}
           disabled={disabled}
+          isNested={isNested}
         />
       );
     case 'number':
@@ -111,6 +214,7 @@ function ItemInput({ item, value, onChange, disabled }: ItemInputProps) {
           value={value as number | null}
           onChange={onChange}
           disabled={disabled}
+          isNested={isNested}
         />
       );
     case 'scale':
@@ -120,6 +224,7 @@ function ItemInput({ item, value, onChange, disabled }: ItemInputProps) {
           value={value as { value: number; notes?: string } | null}
           onChange={onChange}
           disabled={disabled}
+          isNested={isNested}
         />
       );
     case 'text':
@@ -129,6 +234,7 @@ function ItemInput({ item, value, onChange, disabled }: ItemInputProps) {
           value={value as string | null}
           onChange={onChange}
           disabled={disabled}
+          isNested={isNested}
         />
       );
   }
@@ -139,14 +245,21 @@ function CheckboxInput({
   value,
   onChange,
   disabled,
+  isNested,
 }: {
-  item: Item;
+  item: LeafItem;
   value: boolean;
   onChange: (value: boolean) => void;
   disabled?: boolean;
+  isNested?: boolean;
 }) {
   return (
-    <div className="flex items-center space-x-3 p-3 border rounded-lg">
+    <div
+      className={cn(
+        'flex items-center space-x-3 p-3 border rounded-lg',
+        isNested && 'border-dashed'
+      )}
+    >
       <Checkbox
         id={item.id}
         checked={value}
@@ -165,17 +278,26 @@ function NumberInput({
   value,
   onChange,
   disabled,
+  isNested,
 }: {
-  item: Item;
+  item: LeafItem;
   value: number | null;
   onChange: (value: number | null) => void;
   disabled?: boolean;
+  isNested?: boolean;
 }) {
   return (
-    <div className="p-3 border rounded-lg space-y-2">
+    <div
+      className={cn(
+        'p-3 border rounded-lg space-y-2',
+        isNested && 'border-dashed'
+      )}
+    >
       <Label htmlFor={item.id} className="font-medium">
         {item.name}
-        {item.unit && <span className="text-muted-foreground ml-1">({item.unit})</span>}
+        {item.unit && (
+          <span className="text-muted-foreground ml-1">({item.unit})</span>
+        )}
       </Label>
       <Input
         id={item.id}
@@ -198,11 +320,13 @@ function ScaleInput({
   value,
   onChange,
   disabled,
+  isNested,
 }: {
-  item: Item;
+  item: LeafItem;
   value: { value: number; notes?: string } | null;
   onChange: (value: { value: number; notes?: string } | null) => void;
   disabled?: boolean;
+  isNested?: boolean;
 }) {
   const scaleValue = value?.value ?? 0;
   const notes = value?.notes ?? '';
@@ -223,7 +347,12 @@ function ScaleInput({
   };
 
   return (
-    <div className="p-3 border rounded-lg space-y-3">
+    <div
+      className={cn(
+        'p-3 border rounded-lg space-y-3',
+        isNested && 'border-dashed'
+      )}
+    >
       <Label className="font-medium">{item.name}</Label>
       <div className="flex gap-2">
         {[1, 2, 3, 4, 5].map((n) => (
@@ -260,14 +389,21 @@ function TextInput({
   value,
   onChange,
   disabled,
+  isNested,
 }: {
-  item: Item;
+  item: LeafItem;
   value: string | null;
   onChange: (value: string | null) => void;
   disabled?: boolean;
+  isNested?: boolean;
 }) {
   return (
-    <div className="p-3 border rounded-lg space-y-2">
+    <div
+      className={cn(
+        'p-3 border rounded-lg space-y-2',
+        isNested && 'border-dashed'
+      )}
+    >
       <Label htmlFor={item.id} className="font-medium">
         {item.name}
       </Label>

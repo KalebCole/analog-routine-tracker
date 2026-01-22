@@ -5,13 +5,49 @@ import {
   updateRoutineSchema,
   uuidParamSchema,
   Item,
+  LeafItem,
+  GroupItem,
   RoutineDTO,
+  ItemInput,
+  LeafItemInput,
+  GroupItemInput,
 } from '@analog-routine-tracker/shared';
 import { query, transaction } from '../db/client';
 import { asyncHandler } from '../utils/async-handler';
 import { validate } from '../middleware/validate';
 import { NotFoundError } from '../middleware/error-handler';
 import { updateRoutineWithVersioning } from '../services/versioning.service';
+
+// Helper to add IDs to items (including nested group children)
+function addItemIds(itemInputs: ItemInput[], startOrder = 0): Item[] {
+  return itemInputs.map((item, index): Item => {
+    const order = item.order ?? startOrder + index;
+
+    if (item.type === 'group') {
+      const groupInput = item as GroupItemInput;
+      const children: LeafItem[] = groupInput.children.map((child, childIndex) => ({
+        ...child,
+        id: uuidv4(),
+        order: child.order ?? childIndex,
+      } as LeafItem));
+
+      return {
+        id: uuidv4(),
+        name: groupInput.name,
+        type: 'group',
+        children,
+        order,
+      } as GroupItem;
+    }
+
+    const leafInput = item as LeafItemInput;
+    return {
+      ...leafInput,
+      id: uuidv4(),
+      order,
+    } as LeafItem;
+  });
+}
 
 const router = Router();
 
@@ -42,12 +78,8 @@ router.post(
   asyncHandler(async (req, res) => {
     const { name, items: itemInputs } = req.body;
 
-    // Add IDs and ensure order is set
-    const items: Item[] = itemInputs.map((item: Omit<Item, 'id'>, index: number) => ({
-      ...item,
-      id: uuidv4(),
-      order: item.order ?? index,
-    }));
+    // Add IDs and ensure order is set (including nested group children)
+    const items = addItemIds(itemInputs);
 
     const result = await transaction(async (client) => {
       // Create routine
@@ -114,15 +146,8 @@ router.put(
     const { id } = req.params;
     const { name, items: itemInputs } = req.body;
 
-    // If items are provided, add IDs to new items
-    let items: Item[] | undefined;
-    if (itemInputs) {
-      items = itemInputs.map((item: Omit<Item, 'id'>, index: number) => ({
-        ...item,
-        id: uuidv4(),
-        order: item.order ?? index,
-      }));
-    }
+    // If items are provided, add IDs to new items (including nested group children)
+    const items = itemInputs ? addItemIds(itemInputs) : undefined;
 
     const updated = await updateRoutineWithVersioning(id, { name, items });
 

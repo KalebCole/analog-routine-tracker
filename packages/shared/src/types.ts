@@ -1,14 +1,59 @@
 // Item types
-export type ItemType = 'checkbox' | 'number' | 'scale' | 'text';
+export type LeafItemType = 'checkbox' | 'number' | 'scale' | 'text';
+export type ItemType = LeafItemType | 'group';
 
-// Individual item within a routine
-export interface Item {
+// Leaf item (non-group item)
+export interface LeafItem {
   id: string;
   name: string;
-  type: ItemType;
+  type: LeafItemType;
   unit?: string; // for 'number' type (e.g., "lbs", "oz", "minutes")
   hasNotes?: boolean; // for 'scale' type - adds a notes line
   order: number;
+}
+
+// Group item containing nested leaf items (1 level deep only)
+export interface GroupItem {
+  id: string;
+  name: string;
+  type: 'group';
+  children: LeafItem[];
+  order: number;
+}
+
+// Union type for any item
+export type Item = LeafItem | GroupItem;
+
+// Type guards
+export function isGroupItem(item: Item): item is GroupItem {
+  return item.type === 'group';
+}
+
+export function isLeafItem(item: Item): item is LeafItem {
+  return item.type !== 'group';
+}
+
+// Helper to count total items including group children
+export function countTotalItems(items: Item[]): number {
+  return items.reduce((count, item) => {
+    if (isGroupItem(item)) {
+      return count + 1 + item.children.length;
+    }
+    return count + 1;
+  }, 0);
+}
+
+// Helper to flatten items (useful for OCR/completion)
+export function flattenItems(items: Item[]): LeafItem[] {
+  const result: LeafItem[] = [];
+  for (const item of items) {
+    if (isGroupItem(item)) {
+      result.push(...item.children);
+    } else {
+      result.push(item);
+    }
+  }
+  return result;
 }
 
 // Full routine definition
@@ -172,15 +217,25 @@ export interface RoutineStatsDTO {
   lastCompletedAt?: string;
 }
 
+// Item input types (without IDs, for creation)
+export type LeafItemInput = Omit<LeafItem, 'id'>;
+export type GroupItemInput = {
+  name: string;
+  type: 'group';
+  children: LeafItemInput[];
+  order: number;
+};
+// Note: ItemInput is inferred from Zod schema in validation.ts
+
 // API request/response types
 export interface CreateRoutineRequest {
   name: string;
-  items: Omit<Item, 'id'>[];
+  items: (LeafItemInput | GroupItemInput)[];
 }
 
 export interface UpdateRoutineRequest {
   name?: string;
-  items?: Omit<Item, 'id'>[];
+  items?: (LeafItemInput | GroupItemInput)[];
 }
 
 export interface CompleteRoutineRequest {

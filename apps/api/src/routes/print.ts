@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
-import { Item } from '@analog-routine-tracker/shared';
+import { Item, countTotalItems } from '@analog-routine-tracker/shared';
 import { asyncHandler } from '../utils/async-handler';
 import { validate } from '../middleware/validate';
 import { generatePDF, readPDF, cleanupPDF, createPrintResult } from '../services/pdf.service';
@@ -49,7 +49,7 @@ router.get(
     }
 
     const routine = routineResult.rows[0];
-    const itemCount = routine.items.length;
+    const itemCount = countTotalItems(routine.items);
 
     // Get inventory status
     const inventoryResult = await query<InventoryRow>(
@@ -140,7 +140,7 @@ router.post(
     // Determine actual layout
     let actualLayout = layout;
     if (actualLayout === 'auto') {
-      const itemCount = routine.items.length;
+      const itemCount = countTotalItems(routine.items);
       if (itemCount <= 8) {
         actualLayout = 'quarter';
       } else if (itemCount <= 15) {
@@ -156,7 +156,8 @@ router.post(
         routine.name,
         routine.items,
         routine.version,
-        quantity
+        quantity,
+        actualLayout
       );
 
       // Read PDF buffer

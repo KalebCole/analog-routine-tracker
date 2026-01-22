@@ -1,4 +1,4 @@
-import { Item, ItemValue, OCRResult, OCRValue } from '@analog-routine-tracker/shared';
+import { Item, LeafItem, ItemValue, OCRResult, OCRValue, isGroupItem, flattenItems } from '@analog-routine-tracker/shared';
 import { config } from '../config';
 import {
   validateCheckboxValue,
@@ -29,32 +29,51 @@ interface ExtractedValue {
 }
 
 /**
+ * Get human-readable description of an item type
+ */
+function getItemTypeDescription(item: LeafItem): string {
+  switch (item.type) {
+    case 'checkbox':
+      return 'checkbox (checked or unchecked)';
+    case 'number':
+      return `number${item.unit ? ` with unit "${item.unit}"` : ''}`;
+    case 'scale':
+      return 'scale value from 1 to 5';
+    case 'text':
+      return 'text/freeform answer';
+  }
+}
+
+/**
  * Generate the system prompt for OCR extraction
  */
 function generateSystemPrompt(items: Item[]): string {
-  const itemDescriptions = items.map((item, index) => {
-    let typeDesc = '';
-    switch (item.type) {
-      case 'checkbox':
-        typeDesc = 'checkbox (checked or unchecked)';
-        break;
-      case 'number':
-        typeDesc = `number${item.unit ? ` with unit "${item.unit}"` : ''}`;
-        break;
-      case 'scale':
-        typeDesc = 'scale value from 1 to 5';
-        break;
-      case 'text':
-        typeDesc = 'text/freeform answer';
-        break;
+  let counter = 0;
+  const itemDescriptions: string[] = [];
+
+  for (const item of items) {
+    if (isGroupItem(item)) {
+      // Add group header
+      itemDescriptions.push(`\n[Group: ${item.name}]`);
+      // Add children with their descriptions
+      for (const child of item.children) {
+        counter++;
+        const typeDesc = getItemTypeDescription(child);
+        itemDescriptions.push(`  ${counter}. "${child.name}" - ${typeDesc}`);
+      }
+    } else {
+      counter++;
+      const typeDesc = getItemTypeDescription(item);
+      itemDescriptions.push(`${counter}. "${item.name}" - ${typeDesc}`);
     }
-    return `${index + 1}. "${item.name}" - ${typeDesc}`;
-  }).join('\n');
+  }
+
+  const itemDescriptionsText = itemDescriptions.join('\n');
 
   return `You are an OCR assistant that extracts handwritten routine tracking data from paper cards.
 
 The card contains the following items to extract:
-${itemDescriptions}
+${itemDescriptionsText}
 
 For each item, analyze the handwritten content and provide:
 1. The extracted value
@@ -84,19 +103,36 @@ Respond with a JSON object containing an array of extracted values. Example form
 
 /**
  * Generate the user prompt with item IDs
+ * Flattens group items but includes group context
  */
 function generateUserPrompt(items: Item[]): string {
-  const itemsJson = items.map(item => ({
-    id: item.id,
-    name: item.name,
-    type: item.type,
-    unit: item.unit,
-  }));
+  const flatItemsJson: Array<{ id: string; name: string; type: string; unit?: string; groupName?: string }> = [];
+
+  for (const item of items) {
+    if (isGroupItem(item)) {
+      for (const child of item.children) {
+        flatItemsJson.push({
+          id: child.id,
+          name: child.name,
+          type: child.type,
+          unit: child.unit,
+          groupName: item.name,
+        });
+      }
+    } else {
+      flatItemsJson.push({
+        id: item.id,
+        name: item.name,
+        type: item.type,
+        unit: item.unit,
+      });
+    }
+  }
 
   return `Extract the values from this routine card image.
 
 Items to extract (use these exact IDs):
-${JSON.stringify(itemsJson, null, 2)}
+${JSON.stringify(flatItemsJson, null, 2)}
 
 Return your response as valid JSON only, no other text.`;
 }
@@ -197,10 +233,14 @@ function parseGPT4oResponse(responseContent: string, items: Item[]): {
 
 /**
  * Convert extracted values to typed ItemValue objects
+ * Uses flattened leaf items for type checking
  */
 function convertToItemValues(extractedValues: ExtractedValue[], items: Item[]): OCRValue[] {
+  // Flatten items to get only leaf items for type checking
+  const leafItems = flattenItems(items);
+
   return extractedValues.map(ev => {
-    const item = items.find(i => i.id === ev.itemId);
+    const item = leafItems.find(i => i.id === ev.itemId);
     if (!item) {
       return {
         itemId: ev.itemId,
@@ -267,8 +307,9 @@ export async function extractFromImage(
     // Convert to typed values
     const ocrValues = convertToItemValues(parsed.values, items);
 
-    // Ensure all items have a value (even if null)
-    const allValues = items.map(item => {
+    // Flatten items and ensure all leaf items have a value (even if null)
+    const leafItems = flattenItems(items);
+    const allValues = leafItems.map(item => {
       const existing = ocrValues.find(v => v.itemId === item.id);
       if (existing) return existing;
 
@@ -311,8 +352,9 @@ export async function mockExtractFromImage(
   // Simulate processing delay
   await new Promise(resolve => setTimeout(resolve, 1500));
 
-  // Generate mock values with varying confidence
-  const mockValues: OCRValue[] = items.map(item => {
+  // Flatten items and generate mock values with varying confidence
+  const leafItems = flattenItems(items);
+  const mockValues: OCRValue[] = leafItems.map(item => {
     const confidence = 0.6 + Math.random() * 0.35; // 0.6-0.95
     let value: ItemValue['value'] = null;
 
