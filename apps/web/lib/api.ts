@@ -78,6 +78,13 @@ class ApiClient {
     this.baseUrl = baseUrl;
   }
 
+  private getAuthHeaders(): Record<string, string> {
+    const token = typeof window !== 'undefined'
+      ? process.env.NEXT_PUBLIC_AUTH_TOKEN
+      : undefined;
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  }
+
   private async request<T>(
     endpoint: string,
     options: RequestInit = {}
@@ -88,6 +95,7 @@ class ApiClient {
       ...options,
       headers: {
         'Content-Type': 'application/json',
+        ...this.getAuthHeaders(),
         ...options.headers,
       },
     });
@@ -151,6 +159,9 @@ class ApiClient {
 
     const response = await fetch(`${this.baseUrl}/api/routines/${routineId}/upload`, {
       method: 'POST',
+      headers: {
+        ...this.getAuthHeaders(),
+      },
       body: formData,
     });
 
