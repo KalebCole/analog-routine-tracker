@@ -5,15 +5,14 @@ const router = Router();
 
 /**
  * GET /files/:container/:routineId/:filename
- * Serve files from mock storage (development only)
+ * Serve files from local/mock storage
  */
 router.get('/:container/:routineId/:filename', (req: Request, res: Response) => {
   const { container, routineId, filename } = req.params;
   const blobName = `${routineId}/${filename}`;
 
-  // Type guard for getBlob method (only available in mock storage)
   if (!storageService.getBlob) {
-    return res.status(404).json({ error: 'File serving not available in production' });
+    return res.status(404).json({ error: 'File serving not available (Azure mode uses SAS URLs)' });
   }
 
   const buffer = storageService.getBlob(container, blobName);

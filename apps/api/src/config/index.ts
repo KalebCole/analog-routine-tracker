@@ -40,6 +40,10 @@ export const config = {
   // App URLs
   apiUrl: process.env.API_URL || 'http://localhost:3001',
 
+  // Storage
+  storageMode: (process.env.STORAGE_MODE || 'azure') as 'azure' | 'local',
+  localStoragePath: process.env.LOCAL_STORAGE_PATH || '/data/uploads',
+
   // Feature flags
   isDevelopment: process.env.NODE_ENV === 'development',
   isProduction: process.env.NODE_ENV === 'production',
@@ -48,12 +52,18 @@ export const config = {
 // Validate required config in production
 export function validateConfig(): void {
   if (config.isProduction) {
-    const required = [
-      'DATABASE_URL',
-      'AZURE_STORAGE_CONNECTION_STRING',
-      'AZURE_OPENAI_ENDPOINT',
-      'AZURE_OPENAI_KEY',
-    ];
+    const required: string[] = ['DATABASE_URL'];
+
+    // Only require Azure Storage if not using local storage
+    if (config.storageMode !== 'local') {
+      required.push('AZURE_STORAGE_CONNECTION_STRING');
+    }
+
+    // Azure OpenAI is needed for OCR regardless of storage mode
+    if (process.env.AZURE_OPENAI_ENDPOINT) {
+      // Only validate key if endpoint is set
+      required.push('AZURE_OPENAI_KEY');
+    }
 
     const missing = required.filter((key) => !process.env[key]);
 

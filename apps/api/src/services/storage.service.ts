@@ -5,6 +5,8 @@ import {
   generateBlobSASQueryParameters,
   BlobSASPermissions,
 } from '@azure/storage-blob';
+import fs from 'fs';
+import path from 'path';
 import { config } from '../config';
 
 export interface UploadResult {
@@ -17,6 +19,69 @@ export interface StorageService {
   uploadPhoto(buffer: Buffer, routineId: string): Promise<UploadResult>;
   deleteBlob(containerName: string, blobName: string): Promise<boolean>;
   generateSasUrl(containerName: string, blobName: string, expiresIn: number): Promise<string>;
+  getBlob?: (containerName: string, blobName: string) => Buffer | undefined;
+}
+
+/**
+ * Local filesystem storage service for self-hosted deployments.
+ * Stores files on disk at LOCAL_STORAGE_PATH (default: /data/uploads).
+ */
+class LocalFilesystemStorageService implements StorageService {
+  private basePath: string;
+
+  constructor() {
+    this.basePath = config.localStoragePath;
+    // Ensure directories exist
+    for (const container of ['photos', 'pdfs']) {
+      const dir = path.join(this.basePath, container);
+      fs.mkdirSync(dir, { recursive: true });
+    }
+  }
+
+  private filePath(container: string, blobName: string): string {
+    return path.join(this.basePath, container, blobName);
+  }
+
+  async uploadPDF(buffer: Buffer, routineId: string): Promise<UploadResult> {
+    const blobName = `${routineId}/${uuidv4()}.pdf`;
+    const fp = this.filePath('pdfs', blobName);
+    fs.mkdirSync(path.dirname(fp), { recursive: true });
+    fs.writeFileSync(fp, buffer);
+    const url = `${config.apiUrl}/api/files/pdfs/${blobName}`;
+    return { url, blobName };
+  }
+
+  async uploadPhoto(buffer: Buffer, routineId: string): Promise<UploadResult> {
+    const blobName = `${routineId}/${uuidv4()}.jpg`;
+    const fp = this.filePath('photos', blobName);
+    fs.mkdirSync(path.dirname(fp), { recursive: true });
+    fs.writeFileSync(fp, buffer);
+    const url = `${config.apiUrl}/api/files/photos/${blobName}`;
+    return { url, blobName };
+  }
+
+  async deleteBlob(containerName: string, blobName: string): Promise<boolean> {
+    const fp = this.filePath(containerName, blobName);
+    try {
+      fs.unlinkSync(fp);
+    } catch {
+      // Idempotent delete
+    }
+    return true;
+  }
+
+  async generateSasUrl(containerName: string, blobName: string, _expiresIn: number): Promise<string> {
+    return `${config.apiUrl}/api/files/${containerName}/${blobName}`;
+  }
+
+  getBlob(containerName: string, blobName: string): Buffer | undefined {
+    const fp = this.filePath(containerName, blobName);
+    try {
+      return fs.readFileSync(fp);
+    } catch {
+      return undefined;
+    }
+  }
 }
 
 /**
@@ -176,7 +241,12 @@ class AzureStorageService implements StorageService {
 
 // Export singleton instance based on configuration
 // Use AzureStorageService when credentials are available, otherwise fallback to mock
-const createStorageService = (): StorageService & { getBlob?: (c: string, b: string) => Buffer | undefined } => {
+const createStorageService = (): StorageService => {
+  if (config.storageMode === 'local') {
+    console.log(`[Storage] Using local filesystem at ${config.localStoragePath}`);
+    return new LocalFilesystemStorageService();
+  }
+
   if (config.azureStorageConnectionString) {
     console.log('[Storage] Using Azure Blob Storage');
     return new AzureStorageService();
