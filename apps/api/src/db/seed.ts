@@ -1,5 +1,4 @@
-import { query, transaction } from './client';
-import { config } from '../config';
+import { transaction } from './client';
 
 interface SeedItem {
   id: string;
