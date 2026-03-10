@@ -108,6 +108,13 @@ npm run build            # Build all packages
 npm run build:web        # Build frontend
 npm run build:api        # Build backend
 
+# Docker (self-hosted)
+docker compose build     # Build all containers
+docker compose up -d     # Start all services (detached)
+docker compose down      # Stop all services
+docker compose logs -f   # Follow logs
+docker compose exec api node apps/api/dist/db/seed.js  # Seed data
+
 # Database
 npm run db:migrate       # Run migrations
 npm run db:seed          # Seed test data
@@ -161,7 +168,11 @@ Cards include OCR alignment markers (corner dots) and version number. Three layo
 # Database
 DATABASE_URL=postgresql://...
 
-# Azure Blob Storage
+# Storage mode: 'azure' (default) or 'local' (self-hosted)
+STORAGE_MODE=local                          # Use local filesystem instead of Azure Blob
+LOCAL_STORAGE_PATH=/data/uploads            # Path for local file storage
+
+# Azure Blob Storage (only needed when STORAGE_MODE=azure)
 AZURE_STORAGE_CONNECTION_STRING=...
 AZURE_STORAGE_CONTAINER_PHOTOS=photos
 AZURE_STORAGE_CONTAINER_PDFS=pdfs

@@ -1,4 +1,104 @@
-# Deployment Guide — Azure
+# Deployment Guide
+
+This guide covers two deployment options:
+1. **[Self-Hosted (Docker Compose)](#self-hosted-docker-compose)** — Run everything on a single machine (e.g., Mac mini) with Docker
+2. **[Azure Cloud](#azure-cloud)** — Deploy to Azure App Service + Static Web Apps
+
+---
+
+## Self-Hosted (Docker Compose)
+
+Run the entire stack locally with Docker Compose. Only Azure OpenAI (for OCR) remains an external dependency.
+
+### Architecture
+
+```
+Docker Compose on Mac mini / Linux server
+├── web       (Next.js)         → :3000
+├── api       (Express + Python) → :3001
+└── db        (PostgreSQL 16)    → :5432
+    └── volumes: pgdata, uploads
+```
+
+Accessible via Tailscale at `http://<tailscale-hostname>:3000`.
+
+### Prerequisites
+
+- Docker & Docker Compose v2
+- Azure OpenAI resource with GPT-4o deployed (for OCR feature only — everything else works without it)
+
+### Setup
+
+```bash
+# 1. Clone the repo
+git clone <repo-url> && cd analog-routine-tracker
+
+# 2. Configure environment
+cp .env.docker .env.docker.local   # optional: keep template clean
+# Edit .env.docker — at minimum set:
+#   API_AUTH_TOKEN (generate with: openssl rand -hex 32)
+#   AZURE_OPENAI_ENDPOINT + AZURE_OPENAI_KEY (for OCR)
+#   POSTGRES_PASSWORD (change from default)
+
+# 3. Build and start
+docker compose build
+docker compose up -d
+
+# 4. (Optional) Seed test data
+docker compose exec api node apps/api/dist/db/seed.js
+```
+
+The API runs migrations automatically on startup.
+
+### Accessing via Tailscale
+
+If your Mac mini is on Tailscale:
+
+```bash
+# Access from any Tailscale device
+http://<mac-mini-tailscale-hostname>:3000
+
+# Update .env.docker CORS to include Tailscale hostname:
+CORS_ORIGIN=http://localhost:3000,http://<tailscale-hostname>:3000
+
+# Rebuild web with Tailscale URL:
+NEXT_PUBLIC_API_URL=http://<tailscale-hostname>:3001 docker compose build web
+docker compose up -d web
+```
+
+### Commands
+
+```bash
+docker compose up -d          # Start all services
+docker compose down            # Stop all services
+docker compose logs -f api     # Follow API logs
+docker compose exec api node apps/api/dist/db/seed.js   # Seed data
+docker compose build --no-cache  # Full rebuild
+```
+
+### Backups
+
+```bash
+# Backup PostgreSQL
+docker compose exec db pg_dump -U routine analog_routine_tracker > backup_$(date +%Y%m%d).sql
+
+# Restore
+cat backup_20260310.sql | docker compose exec -T db psql -U routine analog_routine_tracker
+
+# Backup uploaded files
+docker cp $(docker compose ps -q api):/data/uploads ./uploads-backup
+```
+
+### Troubleshooting
+
+- **API can't connect to DB:** Ensure `db` service is healthy: `docker compose ps`
+- **CORS errors:** Check `CORS_ORIGIN` in `.env.docker` matches your browser URL exactly (no trailing slash)
+- **Migrations fail:** Check logs: `docker compose logs api | head -20`
+- **Frontend shows "Network Error":** Ensure `NEXT_PUBLIC_API_URL` build arg matches how you access the API
+
+---
+
+## Azure Cloud
 
 Step-by-step instructions to deploy Analog Routine Tracker to Azure.
 
