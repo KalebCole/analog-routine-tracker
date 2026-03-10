@@ -174,10 +174,29 @@ AZURE_OPENAI_DEPLOYMENT=gpt-4o
 # Todoist
 TODOIST_API_TOKEN=...
 
+# Authentication (optional in dev, required in production)
+API_AUTH_TOKEN=your-shared-secret          # API bearer token
+NEXT_PUBLIC_AUTH_TOKEN=your-shared-secret   # Same token, exposed to frontend
+
+# CORS (optional — defaults to localhost:3000 in dev, FRONTEND_URL in prod)
+CORS_ORIGIN=https://your-frontend.com      # Comma-separated origins
+
 # App
 API_URL=http://localhost:3001
 NEXT_PUBLIC_API_URL=http://localhost:3001
+FRONTEND_URL=http://localhost:3000
 ```
+
+## Security
+
+- **Authentication:** Bearer token middleware on all API routes. `GET /health` is unauthenticated.
+- **Rate limiting:** 100 requests/minute via express-rate-limit.
+- **CORS:** Configurable via `CORS_ORIGIN` env var; defaults to localhost in dev.
+- **File uploads:** 10MB max via multer.
+
+## PWA
+
+The app is installable as a PWA. Service worker (`public/sw.js`) caches the app shell for offline access. Icons are in `public/icons/`.
 
 ## Key Files to Understand
 
