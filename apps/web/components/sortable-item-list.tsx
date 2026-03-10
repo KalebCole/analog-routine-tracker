@@ -54,7 +54,8 @@ export function SortableItemList({
     })
   );
 
-  const itemIds = items.map((_, index) => `item-${index}`);
+  // Generate stable IDs for items (use name+order as key since inputs don't have IDs)
+  const itemIds = items.map((item, index) => `item-${item.name || ''}-${item.order ?? index}-${index}`);
 
   const handleDragStart = (event: DragStartEvent) => {
     setActiveId(event.active.id as string);
@@ -81,7 +82,7 @@ export function SortableItemList({
   };
 
   const activeIndex = activeId
-    ? parseInt(activeId.replace('item-', ''), 10)
+    ? itemIds.indexOf(activeId)
     : null;
   const activeItem = activeIndex !== null ? items[activeIndex] : null;
 
@@ -94,8 +95,10 @@ export function SortableItemList({
     >
       <SortableContext items={itemIds} strategy={verticalListSortingStrategy}>
         <div className="space-y-2">
-          {items.map((item, index) => (
-            <SortableItem key={`item-${index}`} id={`item-${index}`}>
+          {items.map((item, index) => {
+            const itemId = itemIds[index];
+            return (
+            <SortableItem key={itemId} id={itemId}>
               {(dragHandleProps: DragHandleProps) => (
                 <ItemEditor
                   item={item}
@@ -110,7 +113,8 @@ export function SortableItemList({
                 />
               )}
             </SortableItem>
-          ))}
+            );
+          })}
         </div>
       </SortableContext>
 
