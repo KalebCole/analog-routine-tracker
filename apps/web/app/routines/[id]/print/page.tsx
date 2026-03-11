@@ -80,7 +80,10 @@ export default function PrintRoutinePage({ params }: PageProps) {
         quantity,
       });
 
-      setPdfUrl(result.pdf.url);
+      // Use the streaming PDF endpoint instead of stored file URL
+      // This works from any device since it goes through the same API base URL
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+      setPdfUrl(`${apiBase}/api/routines/${id}/pdf?layout=${selectedLayout}&quantity=${quantity}`);
       setGenerationResult({
         pagesGenerated: result.pagesGenerated,
         cardsPerPage: result.cardsPerPage,

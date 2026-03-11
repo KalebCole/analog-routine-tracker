@@ -115,6 +115,55 @@ router.get(
 );
 
 /**
+ * GET /routines/:id/pdf
+ * Generate and stream PDF as binary response (works from any device / curl)
+ */
+router.get(
+  '/:id/pdf',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const layout = (req.query.layout as 'quarter' | 'half' | 'full' | 'auto') || 'auto';
+    const quantity = Math.min(Math.max(parseInt(req.query.quantity as string) || 4, 1), 100);
+
+    const routineResult = await query<RoutineRow>(
+      'SELECT id, name, items, version FROM routines WHERE id = $1',
+      [id]
+    );
+
+    if (routineResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Routine not found' });
+    }
+
+    const routine = routineResult.rows[0];
+
+    try {
+      const { pdfPath, result } = await generatePDF(
+        routine.name,
+        routine.items,
+        routine.version,
+        quantity,
+        layout
+      );
+
+      const pdfBuffer = await readPDF(pdfPath);
+      await cleanupPDF(pdfPath);
+
+      const safeName = routine.name.replace(/[^a-zA-Z0-9_-]/g, '_');
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${safeName}_v${routine.version}.pdf"`);
+      res.setHeader('Content-Length', pdfBuffer.length);
+      res.send(pdfBuffer);
+    } catch (error) {
+      console.error('PDF generation error:', error);
+      res.status(500).json({
+        error: 'Failed to generate PDF',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  })
+);
+
+/**
  * POST /routines/:id/print
  * Generate PDF and return download URL
  */
