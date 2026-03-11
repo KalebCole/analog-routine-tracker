@@ -7,7 +7,7 @@ RUN apk add --no-cache python3 py3-pip && \
 WORKDIR /app
 
 # Copy root workspace files
-COPY package.json package-lock.json turbo.json ./
+COPY package.json package-lock.json turbo.json tsconfig.base.json ./
 COPY packages/ ./packages/
 COPY apps/api/package.json ./apps/api/
 
