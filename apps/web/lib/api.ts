@@ -253,6 +253,27 @@ class ApiClient {
     return this.request<RoutineStatsDTO>(`/routines/${routineId}/stats`);
   }
 
+  // Analytics
+  async getAnalyticsSummary(routineId: string): Promise<any> {
+    return this.request(`/routines/${routineId}/analytics/summary`);
+  }
+
+  async getAnalyticsHeatmap(routineId: string, months: number = 3): Promise<any> {
+    return this.request(`/routines/${routineId}/analytics/heatmap?months=${months}`);
+  }
+
+  async getAnalyticsItems(routineId: string, days: number = 30): Promise<any> {
+    return this.request(`/routines/${routineId}/analytics/items?days=${days}`);
+  }
+
+  async getAnalyticsTrends(routineId: string, weeks: number = 12): Promise<any> {
+    return this.request(`/routines/${routineId}/analytics/trends?weeks=${weeks}`);
+  }
+
+  async getAnalyticsOverview(): Promise<any> {
+    return this.request('/analytics/overview');
+  }
+
   // Health
   async healthCheck(): Promise<{ status: string; timestamp: string }> {
     return this.request('/health');

@@ -15,6 +15,7 @@ import { NotFoundError, ConflictError, BadRequestError } from '../middleware/err
 import { performOCR } from '../services/ocr.service';
 import { storageService } from '../services/storage.service';
 import { todoistService } from '../services/todoist.service';
+import { updateAnalyticsCache, updateStreakState } from '../services/analytics.service';
 
 const router = Router();
 
@@ -114,6 +115,11 @@ router.post(
 
       return completionResult.rows[0];
     });
+
+    // Update analytics cache (non-blocking)
+    const completionDate = req.body.date;
+    updateAnalyticsCache(routineId, completionDate).catch(err => console.error('[Analytics] Cache update failed:', err));
+    updateStreakState(routineId).catch(err => console.error('[Analytics] Streak update failed:', err));
 
     res.status(201).json(toCompletedRoutineDTO(result));
   })
@@ -238,6 +244,11 @@ router.post(
     todoistService.sendInventoryAlert(routineId, routineName).catch((err) => {
       console.error('[Todoist] Alert failed:', err);
     });
+
+    // Update analytics cache (non-blocking)
+    const completionDate = req.body.date;
+    updateAnalyticsCache(routineId, completionDate).catch(err => console.error('[Analytics] Cache update failed:', err));
+    updateStreakState(routineId).catch(err => console.error('[Analytics] Streak update failed:', err));
 
     res.status(201).json(toCompletedRoutineDTO(result.completion));
   })

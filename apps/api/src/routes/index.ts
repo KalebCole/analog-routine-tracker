@@ -6,6 +6,7 @@ import printRouter from './print';
 import inventoryRouter from './inventory';
 import filesRouter from './files';
 import adminRouter from './admin';
+import analyticsRouter from './analytics';
 import { uuidParamSchema } from '@analog-routine-tracker/shared';
 import { asyncHandler } from '../utils/async-handler';
 import { validate } from '../middleware/validate';
@@ -28,6 +29,7 @@ router.use('/routines', inventoryRouter);
 router.use('/inventory', inventoryRouter);
 router.use('/files', filesRouter);
 router.use('/admin', adminRouter);
+router.use('/', analyticsRouter);
 
 // Stats endpoint
 router.get(

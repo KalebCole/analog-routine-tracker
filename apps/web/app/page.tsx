@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Plus, RefreshCw, Loader2 } from 'lucide-react';
+import { Plus, RefreshCw, Loader2, BarChart3 } from 'lucide-react';
 import { RoutineStatsDTO } from '@analog-routine-tracker/shared';
 import { Button } from '@/components/ui/button';
 import { RoutineCard } from '@/components/routine-card';
@@ -79,6 +79,11 @@ export default function HomePage() {
             disabled={isLoading}
           >
             <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+          </Button>
+          <Button asChild variant="outline" size="icon">
+            <Link href="/dashboard">
+              <BarChart3 className="h-4 w-4" />
+            </Link>
           </Button>
           <Button asChild>
             <Link href="/routines/new">
