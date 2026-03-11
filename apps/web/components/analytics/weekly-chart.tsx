@@ -39,8 +39,8 @@ export function WeeklyChart({ data }: WeeklyChartProps) {
           <XAxis dataKey="day" tick={{ fontSize: 12 }} />
           <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} tickFormatter={v => `${v}%`} />
           <Tooltip
-            formatter={(value: number) => [`${value}%`, 'Completion']}
-            labelFormatter={(label: string) => label}
+            formatter={(value: any) => [`${value}%`, 'Completion']}
+            labelFormatter={(label: any) => label}
           />
           <Bar dataKey="completionPct" radius={[4, 4, 0, 0]} maxBarSize={40}>
             {chartData.map((entry, i) => (
