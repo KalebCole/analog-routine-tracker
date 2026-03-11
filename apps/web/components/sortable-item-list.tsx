@@ -54,8 +54,8 @@ export function SortableItemList({
     })
   );
 
-  // Generate stable IDs for items (use name+order as key since inputs don't have IDs)
-  const itemIds = items.map((item, index) => `item-${item.name || ''}-${item.order ?? index}-${index}`);
+  // Use index-only IDs so keys don't change when the user edits a name
+  const itemIds = items.map((_item, index) => `item-${index}`);
 
   const handleDragStart = (event: DragStartEvent) => {
     setActiveId(event.active.id as string);
