@@ -122,8 +122,7 @@ router.get(
   '/:id/pdf',
   asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
-    const layout = (req.query.layout as 'quarter' | 'half' | 'full' | 'auto') || 'auto';
-    const quantity = Math.min(Math.max(parseInt(req.query.quantity as string) || 4, 1), 100);
+    const layout = 'full' as const;
 
     const routineResult = await query<RoutineRow>(
       'SELECT id, name, items, version FROM routines WHERE id = $1',
@@ -140,9 +139,7 @@ router.get(
       const { pdfPath, result } = await generatePDF(
         routine.name,
         routine.items,
-        routine.version,
-        quantity,
-        layout
+        routine.version
       );
 
       const pdfBuffer = await readPDF(pdfPath);
@@ -172,7 +169,6 @@ router.post(
   validate({ body: printRequestSchema }),
   asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { layout, quantity } = req.body;
 
     // Get routine with items
     const routineResult = await query<RoutineRow>(
@@ -186,27 +182,12 @@ router.post(
 
     const routine = routineResult.rows[0];
 
-    // Determine actual layout
-    let actualLayout = layout;
-    if (actualLayout === 'auto') {
-      const itemCount = countTotalItems(routine.items);
-      if (itemCount <= 8) {
-        actualLayout = 'quarter';
-      } else if (itemCount <= 15) {
-        actualLayout = 'half';
-      } else {
-        actualLayout = 'full';
-      }
-    }
-
     try {
       // Generate PDF
       const { pdfPath, result } = await generatePDF(
         routine.name,
         routine.items,
-        routine.version,
-        quantity,
-        actualLayout
+        routine.version
       );
 
       // Read PDF buffer

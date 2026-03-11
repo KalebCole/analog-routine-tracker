@@ -43,9 +43,7 @@ export function determineCardLayoutFromItems(items: Item[]): CardLayout {
 export async function generatePDF(
   routineName: string,
   items: Item[],
-  version: number,
-  quantity: number,
-  layout: 'quarter' | 'half' | 'full' | 'auto' = 'auto'
+  version: number
 ): Promise<{ pdfPath: string; result: PDFGeneratorResult }> {
   // Ensure temp directory exists
   await fs.mkdir(TEMP_DIR, { recursive: true });
@@ -54,8 +52,7 @@ export async function generatePDF(
   const inputPath = path.join(TEMP_DIR, `${inputId}.json`);
   const outputPath = path.join(TEMP_DIR, `${inputId}.pdf`);
 
-  // Prepare input data - serialize items including group structure
-  const inputData: PDFGeneratorInput = {
+  const inputData = {
     name: routineName,
     items: items.map((item) => {
       if (isGroupItem(item)) {
@@ -81,7 +78,6 @@ export async function generatePDF(
       };
     }) as Item[],
     version,
-    quantity,
   };
 
   // Write input file
@@ -89,7 +85,7 @@ export async function generatePDF(
 
   try {
     // Run Python script
-    const result = await runPythonScript(inputPath, outputPath, layout);
+    const result = await runPythonScript(inputPath, outputPath);
 
     // Clean up input file
     await fs.unlink(inputPath).catch(() => {});
@@ -108,8 +104,7 @@ export async function generatePDF(
  */
 function runPythonScript(
   inputPath: string,
-  outputPath: string,
-  layout: 'quarter' | 'half' | 'full' | 'auto'
+  outputPath: string
 ): Promise<PDFGeneratorResult> {
   return new Promise((resolve, reject) => {
     const scriptPath = path.join(SCRIPTS_DIR, 'generate-card-pdf.py');
@@ -120,8 +115,6 @@ function runPythonScript(
       inputPath,
       '--output',
       outputPath,
-      '--layout',
-      layout,
     ]);
 
     let stdout = '';
