@@ -263,7 +263,6 @@ def generate_pdf(routine, output_path=None, copies=1):
         'layout': 'full',
         'cards_per_page': 1,
         'pages_generated': copies,
-        'pages_generated': 1,
         'cards_generated': 1
     }
 
