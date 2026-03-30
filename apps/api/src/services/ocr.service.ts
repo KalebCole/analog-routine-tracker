@@ -177,6 +177,16 @@ function resolveVisionConfig(): VisionAPIConfig {
   throw new Error('No vision API configured. Set VISION_API_BASE_URL + VISION_API_KEY, or AZURE_OPENAI_ENDPOINT + AZURE_OPENAI_KEY + AZURE_OPENAI_DEPLOYMENT.');
 }
 
+function detectMimeType(base64: string): string {
+  // Check magic bytes from base64-encoded data
+  const header = Buffer.from(base64.slice(0, 16), 'base64');
+  if (header[0] === 0xFF && header[1] === 0xD8) return 'image/jpeg';
+  if (header[0] === 0x89 && header[1] === 0x50) return 'image/png';
+  if (header[0] === 0x52 && header[1] === 0x49) return 'image/webp'; // RIFF
+  if (header[0] === 0x47 && header[1] === 0x49) return 'image/gif';
+  return 'image/jpeg'; // fallback
+}
+
 /**
  * Call any OpenAI-compatible vision API
  */
@@ -197,7 +207,7 @@ async function callVisionAPI(
           {
             type: 'image_url',
             image_url: {
-              url: `data:image/jpeg;base64,${imageBase64}`,
+              url: `data:${detectMimeType(imageBase64)};base64,${imageBase64}`,
               detail: 'high',
             },
           },
