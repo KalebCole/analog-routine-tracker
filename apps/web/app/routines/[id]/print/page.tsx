@@ -25,7 +25,6 @@ export default function PrintRoutinePage({ params }: PageProps) {
   const [quantity, setQuantity] = useState(4);
   const [isGenerating, setIsGenerating] = useState(false);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null); // blob: URL for download
-  const [isDownloading, setIsDownloading] = useState(false);
   const [generationResult, setGenerationResult] = useState<{
     pagesGenerated: number;
     cardsPerPage: number;
