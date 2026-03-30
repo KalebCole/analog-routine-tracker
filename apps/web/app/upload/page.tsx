@@ -189,7 +189,7 @@ export default function GlobalUploadPage() {
             Your completed routine has been recorded.
           </p>
           <div className="flex gap-3 justify-center">
-            <Button variant="outline" onClick={() => router.push('/')}>
+            <Button variant="outline" onClick={() => router.replace('/')}>
               Home
             </Button>
             {selectedRoutineId && (
@@ -241,7 +241,7 @@ export default function GlobalUploadPage() {
   return (
     <div className="container max-w-2xl py-6 px-4">
       <header className="flex items-center gap-4 mb-6">
-        <Button variant="ghost" size="icon" onClick={() => router.push('/')}>
+        <Button variant="ghost" size="icon" onClick={() => router.replace('/')}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <h1 className="text-2xl font-bold">Upload Routine</h1>

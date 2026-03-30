@@ -30,7 +30,7 @@ export function FabUpload() {
               // sessionStorage full — rare, but handle gracefully
               console.warn('Failed to persist photo to sessionStorage');
             }
-            router.push('/upload');
+            router.replace('/upload');
           }
         };
         reader.readAsDataURL(file);
