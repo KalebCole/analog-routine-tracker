@@ -372,6 +372,7 @@ export default function PrintRoutinePage({ params }: PageProps) {
           variant="outline"
           className="w-full"
           onClick={() => {
+            if (pdfUrl) URL.revokeObjectURL(pdfUrl);
             setPdfUrl(null);
             setGenerationResult(null);
             setIsPrintConfirmed(false);
