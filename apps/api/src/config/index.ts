@@ -34,6 +34,11 @@ export const config = {
   azureOpenAIKey: process.env.AZURE_OPENAI_KEY || '',
   azureOpenAIDeployment: process.env.AZURE_OPENAI_DEPLOYMENT || 'gpt-4o',
 
+  // Generic Vision API (preferred over Azure-specific config)
+  visionApiBaseUrl: process.env.VISION_API_BASE_URL || '',  // e.g. https://api.openai.com/v1
+  visionApiKey: process.env.VISION_API_KEY || '',
+  visionModel: process.env.VISION_MODEL || 'gpt-4o',
+
   // Todoist
   todoistApiToken: process.env.TODOIST_API_TOKEN || '',
 
@@ -63,6 +68,15 @@ export function validateConfig(): void {
     if (process.env.AZURE_OPENAI_ENDPOINT) {
       // Only validate key if endpoint is set
       required.push('AZURE_OPENAI_KEY');
+    }
+
+    // Warn if Vision API is partially configured
+    const hasVisionUrl = !!process.env.VISION_API_BASE_URL;
+    const hasVisionKey = !!process.env.VISION_API_KEY;
+    if (hasVisionUrl !== hasVisionKey) {
+      console.warn(
+        'WARNING: Partial Vision API configuration. Both VISION_API_BASE_URL and VISION_API_KEY are required. Falling back to Azure.'
+      );
     }
 
     const missing = required.filter((key) => !process.env[key]);

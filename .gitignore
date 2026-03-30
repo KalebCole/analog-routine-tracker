@@ -67,3 +67,6 @@ temp/
 # Azure Functions
 local.settings.json
 .azure/
+
+# Docker env (real secrets)
+.env.docker
