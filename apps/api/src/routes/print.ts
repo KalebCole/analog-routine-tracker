@@ -171,7 +171,7 @@ router.post(
   validate({ body: printRequestSchema }),
   asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { layout, quantity } = req.body;
+    const { quantity } = req.body;
 
     // Get routine with items
     const routineResult = await query<RoutineRow>(
