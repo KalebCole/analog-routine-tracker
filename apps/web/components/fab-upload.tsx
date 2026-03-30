@@ -12,7 +12,7 @@ export function FabUpload() {
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Hide on upload pages
-  if (pathname === '/upload' || pathname.endsWith('/upload')) {
+  if (pathname === '/upload' || pathname.endsWith('/upload') || pathname.endsWith('/print')) {
     return null;
   }
 
