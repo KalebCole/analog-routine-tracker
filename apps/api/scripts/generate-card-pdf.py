@@ -198,7 +198,7 @@ def draw_column(c, items, x, start_y, col_width):
             y -= ROW_CHECKBOX
 
 
-def generate_pdf(routine, output_path=None):
+def generate_pdf(routine, output_path=None, copies=1):
     """Generate a B2 two-column PDF for the given routine."""
     items = routine.get('items', [])
     version = routine.get('version', 1)
@@ -215,39 +215,43 @@ def generate_pdf(routine, output_path=None):
 
     W, H = PAGE_WIDTH, PAGE_HEIGHT
 
-    # --- Corner dot alignment markers ---
-    c.setFillColor(DARK)
-    for cx, cy in [(MARGIN, H - MARGIN), (W - MARGIN, H - MARGIN),
-                   (MARGIN, MARGIN), (W - MARGIN, MARGIN)]:
-        c.circle(cx, cy, MARKER_RADIUS, fill=1, stroke=0)
+    for copy_num in range(copies):
+        if copy_num > 0:
+            c.showPage()
 
-    # --- Header ---
-    y = H - MARGIN - 22
-    c.setFont("Helvetica-Bold", 18)
-    c.setFillColor(DARK)
-    c.drawString(MARGIN + 6, y, name)
-    c.setFont("Helvetica", 9)
-    c.setFillColor(LIGHT)
-    c.drawRightString(W - MARGIN - 6, y + 2, "Date: ___ / ___ / ___")
-    y -= 8
-    c.setStrokeColor(DARK)
-    c.setLineWidth(2)
-    c.line(MARGIN + 4, y, W - MARGIN - 4, y)
+        # --- Corner dot alignment markers ---
+        c.setFillColor(DARK)
+        for cx, cy in [(MARGIN, H - MARGIN), (W - MARGIN, H - MARGIN),
+                       (MARGIN, MARGIN), (W - MARGIN, MARGIN)]:
+            c.circle(cx, cy, MARKER_RADIUS, fill=1, stroke=0)
 
-    # --- Columns ---
-    col_gap = 18
-    col_w = (W - 2 * MARGIN - col_gap) / 2
-    c1x = MARGIN + 6
-    c2x = MARGIN + 6 + col_w + col_gap
-    start_y = y - 14
+        # --- Header ---
+        y = H - MARGIN - 22
+        c.setFont("Helvetica-Bold", 18)
+        c.setFillColor(DARK)
+        c.drawString(MARGIN + 6, y, name)
+        c.setFont("Helvetica", 9)
+        c.setFillColor(LIGHT)
+        c.drawRightString(W - MARGIN - 6, y + 2, "Date: ___ / ___ / ___")
+        y -= 8
+        c.setStrokeColor(DARK)
+        c.setLineWidth(2)
+        c.line(MARGIN + 4, y, W - MARGIN - 4, y)
 
-    draw_column(c, col1, c1x, start_y, col_w)
-    draw_column(c, col2, c2x, start_y, col_w)
+        # --- Columns ---
+        col_gap = 18
+        col_w = (W - 2 * MARGIN - col_gap) / 2
+        c1x = MARGIN + 6
+        c2x = MARGIN + 6 + col_w + col_gap
+        start_y = y - 14
 
-    # --- Version ---
-    c.setFont("Helvetica", 6)
-    c.setFillColor(LIGHT)
-    c.drawRightString(W - MARGIN - 4, MARGIN + 2, f"v{version}")
+        draw_column(c, col1, c1x, start_y, col_w)
+        draw_column(c, col2, c2x, start_y, col_w)
+
+        # --- Version ---
+        c.setFont("Helvetica", 6)
+        c.setFillColor(LIGHT)
+        c.drawRightString(W - MARGIN - 4, MARGIN + 2, f"v{version}")
 
     c.save()
 
@@ -258,6 +262,7 @@ def generate_pdf(routine, output_path=None):
     return {
         'layout': 'full',
         'cards_per_page': 1,
+        'pages_generated': copies,
         'pages_generated': 1,
         'cards_generated': 1
     }
@@ -269,6 +274,7 @@ def main():
     parser.add_argument('--output', '-o', required=True, help='Output PDF file path')
     parser.add_argument('--layout', '-l', choices=['quarter', 'half', 'full', 'auto'],
                         default='full', help='Card layout (ignored — always full-page two-column)')
+    parser.add_argument('--copies', '-c', type=int, default=1, help='Number of identical pages to generate')
 
     args = parser.parse_args()
 
@@ -284,7 +290,7 @@ def main():
         'version': data.get('version', 1)
     }
 
-    result = generate_pdf(routine, args.output)
+    result = generate_pdf(routine, args.output, copies=args.copies)
     print(json.dumps(result))
 
 

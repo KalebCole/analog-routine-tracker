@@ -43,7 +43,8 @@ export function determineCardLayoutFromItems(items: Item[]): CardLayout {
 export async function generatePDF(
   routineName: string,
   items: Item[],
-  version: number
+  version: number,
+  copies: number = 1
 ): Promise<{ pdfPath: string; result: PDFGeneratorResult }> {
   // Ensure temp directory exists
   await fs.mkdir(TEMP_DIR, { recursive: true });
@@ -85,7 +86,7 @@ export async function generatePDF(
 
   try {
     // Run Python script
-    const result = await runPythonScript(inputPath, outputPath);
+    const result = await runPythonScript(inputPath, outputPath, copies);
 
     // Clean up input file
     await fs.unlink(inputPath).catch(() => {});
@@ -104,7 +105,8 @@ export async function generatePDF(
  */
 function runPythonScript(
   inputPath: string,
-  outputPath: string
+  outputPath: string,
+  copies: number = 1
 ): Promise<PDFGeneratorResult> {
   return new Promise((resolve, reject) => {
     const scriptPath = path.join(SCRIPTS_DIR, 'generate-card-pdf.py');
@@ -115,6 +117,8 @@ function runPythonScript(
       inputPath,
       '--output',
       outputPath,
+      '--copies',
+      String(copies),
     ]);
 
     let stdout = '';

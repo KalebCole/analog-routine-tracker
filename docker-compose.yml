@@ -50,6 +50,16 @@ services:
     ports:
       - "3000:3000"
 
+  caddy:
+    build:
+      context: ./caddy-config
+    restart: unless-stopped
+    depends_on:
+      - web
+      - api
+    ports:
+      - "8080:80"
+
 volumes:
   pgdata:
   uploads:

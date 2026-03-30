@@ -24,7 +24,8 @@ export default function PrintRoutinePage({ params }: PageProps) {
   const [selectedLayout, setSelectedLayout] = useState<CardLayout>('quarter');
   const [quantity, setQuantity] = useState(4);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null); // blob: URL for download
+  const [isDownloading, setIsDownloading] = useState(false);
   const [generationResult, setGenerationResult] = useState<{
     pagesGenerated: number;
     cardsPerPage: number;
@@ -60,12 +61,20 @@ export default function PrintRoutinePage({ params }: PageProps) {
   // Clear PDF when layout changes to allow easy regeneration
   useEffect(() => {
     if (pdfUrl && generatedLayout && selectedLayout !== generatedLayout) {
+      URL.revokeObjectURL(pdfUrl);
       setPdfUrl(null);
       setGenerationResult(null);
       setIsPrintConfirmed(false);
       setGeneratedLayout(null);
     }
   }, [selectedLayout, pdfUrl, generatedLayout]);
+
+  // Cleanup blob URL on unmount
+  useEffect(() => {
+    return () => {
+      if (pdfUrl) URL.revokeObjectURL(pdfUrl);
+    };
+  }, [pdfUrl]);
 
   const handleGeneratePDF = async () => {
     try {
@@ -81,9 +90,17 @@ export default function PrintRoutinePage({ params }: PageProps) {
       });
 
       // Use the streaming PDF endpoint instead of stored file URL
-      // This works from any device since it goes through the same API base URL
+      // Fetch with auth header → create blob URL for secure download
       const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-      setPdfUrl(`${apiBase}/api/routines/${id}/pdf?layout=${selectedLayout}&quantity=${quantity}`);
+      const authToken = process.env.NEXT_PUBLIC_AUTH_TOKEN || '';
+      const pdfResponse = await fetch(
+        `${apiBase}/api/routines/${id}/pdf?layout=${selectedLayout}&quantity=${quantity}`,
+        { headers: authToken ? { Authorization: `Bearer ${authToken}` } : {} }
+      );
+      if (!pdfResponse.ok) throw new Error('Failed to download PDF');
+      const blob = await pdfResponse.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      setPdfUrl(blobUrl);
       setGenerationResult({
         pagesGenerated: result.pagesGenerated,
         cardsPerPage: result.cardsPerPage,
@@ -297,7 +314,7 @@ export default function PrintRoutinePage({ params }: PageProps) {
 
             <div className="flex gap-3">
               <Button asChild className="flex-1">
-                <a href={pdfUrl} target="_blank" rel="noopener noreferrer">
+                <a href={pdfUrl} download={`${routine?.name || 'routine'}.pdf`}>
                   <Download className="h-4 w-4 mr-2" />
                   Download PDF
                 </a>

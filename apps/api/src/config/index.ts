@@ -34,6 +34,11 @@ export const config = {
   azureOpenAIKey: process.env.AZURE_OPENAI_KEY || '',
   azureOpenAIDeployment: process.env.AZURE_OPENAI_DEPLOYMENT || 'gpt-4o',
 
+  // Generic Vision API (preferred over Azure-specific config)
+  visionApiBaseUrl: process.env.VISION_API_BASE_URL || '',  // e.g. https://api.openai.com/v1
+  visionApiKey: process.env.VISION_API_KEY || '',
+  visionModel: process.env.VISION_MODEL || 'gpt-4o',
+
   // Todoist
   todoistApiToken: process.env.TODOIST_API_TOKEN || '',
 

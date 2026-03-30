@@ -122,6 +122,7 @@ router.get(
   '/:id/pdf',
   asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
+    const quantity = Math.max(1, Math.min(100, parseInt(req.query.quantity as string) || 1));
     const layout = 'full' as const;
 
     const routineResult = await query<RoutineRow>(
@@ -139,7 +140,8 @@ router.get(
       const { pdfPath, result } = await generatePDF(
         routine.name,
         routine.items,
-        routine.version
+        routine.version,
+        quantity
       );
 
       const pdfBuffer = await readPDF(pdfPath);
@@ -169,6 +171,7 @@ router.post(
   validate({ body: printRequestSchema }),
   asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
+    const { layout, quantity } = req.body;
 
     // Get routine with items
     const routineResult = await query<RoutineRow>(
@@ -187,7 +190,8 @@ router.post(
       const { pdfPath, result } = await generatePDF(
         routine.name,
         routine.items,
-        routine.version
+        routine.version,
+        quantity
       );
 
       // Read PDF buffer

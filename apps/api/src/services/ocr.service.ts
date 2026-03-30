@@ -9,15 +9,22 @@ import {
 } from '../utils/confidence';
 
 /**
- * OCR Service using Azure OpenAI GPT-4o with vision
+ * OCR Service — generic OpenAI-compatible vision API
+ * Prefers VISION_API_BASE_URL if set, falls back to Azure OpenAI
  */
 
-interface GPT4oResponse {
+interface ChatCompletionResponse {
   choices: Array<{
     message: {
       content: string;
     };
   }>;
+}
+
+interface VisionAPIConfig {
+  url: string;
+  headers: Record<string, string>;
+  model?: string; // included in body for generic API, omitted for Azure (model is in the URL)
 }
 
 interface ExtractedValue {
@@ -138,63 +145,91 @@ Return your response as valid JSON only, no other text.`;
 }
 
 /**
- * Call Azure OpenAI GPT-4o with vision
+ * Resolve which vision API to call.
+ * Priority: VISION_API_BASE_URL > Azure OpenAI > none
  */
-async function callGPT4oVision(
+function resolveVisionConfig(): VisionAPIConfig {
+  // 1. Generic OpenAI-compatible endpoint
+  if (config.visionApiBaseUrl && config.visionApiKey) {
+    return {
+      url: `${config.visionApiBaseUrl.replace(/\/+$/, '')}/chat/completions`,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${config.visionApiKey}`,
+      },
+      model: config.visionModel,
+    };
+  }
+
+  // 2. Azure OpenAI (legacy)
+  const { azureOpenAIEndpoint: endpoint, azureOpenAIKey: apiKey, azureOpenAIDeployment: deployment } = config;
+  if (endpoint && apiKey && deployment) {
+    return {
+      url: `${endpoint}/openai/deployments/${deployment}/chat/completions?api-version=2024-02-15-preview`,
+      headers: {
+        'Content-Type': 'application/json',
+        'api-key': apiKey,
+      },
+      // model is embedded in the Azure URL, not the body
+    };
+  }
+
+  throw new Error('No vision API configured. Set VISION_API_BASE_URL + VISION_API_KEY, or AZURE_OPENAI_ENDPOINT + AZURE_OPENAI_KEY + AZURE_OPENAI_DEPLOYMENT.');
+}
+
+/**
+ * Call any OpenAI-compatible vision API
+ */
+async function callVisionAPI(
   imageBase64: string,
   systemPrompt: string,
   userPrompt: string
-): Promise<GPT4oResponse> {
-  const endpoint = config.azureOpenAIEndpoint;
-  const apiKey = config.azureOpenAIKey;
-  const deployment = config.azureOpenAIDeployment;
+): Promise<ChatCompletionResponse> {
+  const visionConfig = resolveVisionConfig();
 
-  if (!endpoint || !apiKey || !deployment) {
-    throw new Error('Azure OpenAI configuration missing');
+  const body: Record<string, unknown> = {
+    messages: [
+      { role: 'system', content: systemPrompt },
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: userPrompt },
+          {
+            type: 'image_url',
+            image_url: {
+              url: `data:image/jpeg;base64,${imageBase64}`,
+              detail: 'high',
+            },
+          },
+        ],
+      },
+    ],
+    max_completion_tokens: 4096,
+    temperature: 0.1,
+  };
+
+  if (visionConfig.model) {
+    body.model = visionConfig.model;
   }
 
-  const url = `${endpoint}/openai/deployments/${deployment}/chat/completions?api-version=2024-02-15-preview`;
-
-  const response = await fetch(url, {
+  const response = await fetch(visionConfig.url, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'api-key': apiKey,
-    },
-    body: JSON.stringify({
-      messages: [
-        { role: 'system', content: systemPrompt },
-        {
-          role: 'user',
-          content: [
-            { type: 'text', text: userPrompt },
-            {
-              type: 'image_url',
-              image_url: {
-                url: `data:image/jpeg;base64,${imageBase64}`,
-                detail: 'high',
-              },
-            },
-          ],
-        },
-      ],
-      max_completion_tokens: 2000,
-      temperature: 0.1, // Low temperature for more consistent extraction
-    }),
+    headers: visionConfig.headers,
+    body: JSON.stringify(body),
   });
 
   if (!response.ok) {
     const error = await response.text();
-    throw new Error(`Azure OpenAI API error: ${response.status} - ${error}`);
+    throw new Error(`Vision API error: ${response.status} - ${error}`);
   }
 
-  return response.json() as Promise<GPT4oResponse>;
+  return response.json() as Promise<ChatCompletionResponse>;
 }
 
 /**
- * Parse GPT-4o response into structured values
+ * Parse vision API response into structured values
  */
-function parseGPT4oResponse(responseContent: string, items: Item[]): {
+function parseVisionResponse(responseContent: string, items: Item[]): {
   values: ExtractedValue[];
   dateDetected?: string;
   versionDetected?: number;
@@ -293,16 +328,16 @@ export async function extractFromImage(
   const userPrompt = generateUserPrompt(items);
 
   try {
-    // Call GPT-4o Vision
-    const response = await callGPT4oVision(imageBase64, systemPrompt, userPrompt);
+    // Call Vision API
+    const response = await callVisionAPI(imageBase64, systemPrompt, userPrompt);
 
     // Parse response
     const content = response.choices[0]?.message?.content;
     if (!content) {
-      throw new Error('Empty response from GPT-4o');
+      throw new Error('Empty response from vision API');
     }
 
-    const parsed = parseGPT4oResponse(content, items);
+    const parsed = parseVisionResponse(content, items);
 
     // Convert to typed values
     const ocrValues = convertToItemValues(parsed.values, items);
@@ -400,12 +435,15 @@ export async function performOCR(
   items: Item[],
   routineVersion: number
 ): Promise<OCRResult> {
-  // Check if Azure OpenAI is configured
-  if (config.azureOpenAIEndpoint && config.azureOpenAIKey && config.azureOpenAIDeployment) {
+  // Check if any vision API is configured
+  const hasGenericVision = config.visionApiBaseUrl && config.visionApiKey;
+  const hasAzureVision = config.azureOpenAIEndpoint && config.azureOpenAIKey && config.azureOpenAIDeployment;
+
+  if (hasGenericVision || hasAzureVision) {
     return extractFromImage(imageBuffer, items, routineVersion);
   }
 
   // Fall back to mock for development
-  console.warn('Azure OpenAI not configured, using mock OCR');
+  console.warn('No vision API configured, using mock OCR. Set VISION_API_BASE_URL + VISION_API_KEY or Azure OpenAI env vars.');
   return mockExtractFromImage(imageBuffer, items, routineVersion);
 }
