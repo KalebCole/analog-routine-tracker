@@ -77,6 +77,7 @@ export default function GlobalUploadPage() {
         setLocalFile(file);
         setPendingFile(null); // clear context file
       }
+      input.remove();
     };
     input.click();
   };
