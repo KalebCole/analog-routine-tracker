@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -16,9 +16,20 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useRoutines } from '@/hooks/use-routines';
 import { useRoutine } from '@/hooks/use-routine';
-import { useUploadContext } from '@/lib/upload-context';
 import { api, ApiError } from '@/lib/api';
 import { OCRConfirmation } from '@/components/ocr-confirmation';
+
+const PENDING_PHOTO_KEY = 'pendingPhotoDataUrl';
+
+/** Convert a data URL to a File object for upload */
+function dataUrlToFile(dataUrl: string, filename = 'photo.jpg'): File {
+  const [header, base64] = dataUrl.split(',');
+  const mime = header.match(/:(.*?);/)?.[1] || 'image/jpeg';
+  const bytes = atob(base64);
+  const arr = new Uint8Array(bytes.length);
+  for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+  return new File([arr], filename, { type: mime });
+}
 
 interface OCRResultState {
   photoUrl: string;
@@ -32,7 +43,6 @@ interface OCRResultState {
 
 export default function GlobalUploadPage() {
   const router = useRouter();
-  const { pendingFile, setPendingFile } = useUploadContext();
   const { routines, isLoading: routinesLoading } = useRoutines();
 
   const [preview, setPreview] = useState<string | null>(null);
@@ -43,19 +53,36 @@ export default function GlobalUploadPage() {
   const [ocrResult, setOcrResult] = useState<OCRResultState | null>(null);
   const [isComplete, setIsComplete] = useState(false);
   const [localFile, setLocalFile] = useState<File | null>(null);
+  const hydratedRef = useRef(false);
 
   // Load the selected routine's full data for OCR confirmation
   const { routine: selectedRoutine } = useRoutine(selectedRoutineId || '');
 
-  // Generate preview from pending file
+  // Hydrate photo from sessionStorage (set by FAB before navigation)
   useEffect(() => {
-    const file = pendingFile || localFile;
-    if (!file) return;
+    if (hydratedRef.current) return;
+    hydratedRef.current = true;
+
+    try {
+      const stored = sessionStorage.getItem(PENDING_PHOTO_KEY);
+      if (stored) {
+        setPreview(stored);
+        setLocalFile(dataUrlToFile(stored));
+        sessionStorage.removeItem(PENDING_PHOTO_KEY);
+      }
+    } catch {
+      // sessionStorage unavailable — ignore
+    }
+  }, []);
+
+  // Generate preview when a file is picked directly on this page
+  useEffect(() => {
+    if (!localFile || preview) return; // skip if we already have a preview (from hydration)
 
     const reader = new FileReader();
     reader.onloadend = () => setPreview(reader.result as string);
-    reader.readAsDataURL(file);
-  }, [pendingFile, localFile]);
+    reader.readAsDataURL(localFile);
+  }, [localFile, preview]);
 
   // Auto-select if only one routine
   useEffect(() => {
@@ -64,7 +91,7 @@ export default function GlobalUploadPage() {
     }
   }, [routines, selectedRoutineId]);
 
-  const activeFile = pendingFile || localFile;
+  const activeFile = localFile;
 
   const handlePickFile = () => {
     const input = document.createElement('input');
@@ -75,7 +102,10 @@ export default function GlobalUploadPage() {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (file && file.type.startsWith('image/')) {
         setLocalFile(file);
-        setPendingFile(null); // clear context file
+        // Generate preview for locally picked files
+        const reader = new FileReader();
+        reader.onloadend = () => setPreview(reader.result as string);
+        reader.readAsDataURL(file);
       }
       input.remove();
     };
@@ -83,11 +113,11 @@ export default function GlobalUploadPage() {
   };
 
   const handleClearPhoto = () => {
-    setPendingFile(null);
     setLocalFile(null);
     setPreview(null);
     setOcrResult(null);
     setUploadError(null);
+    try { sessionStorage.removeItem(PENDING_PHOTO_KEY); } catch {}
   };
 
   const handleUpload = async () => {
@@ -130,7 +160,6 @@ export default function GlobalUploadPage() {
         photoBlobName: ocrResult.photoBlobName,
       });
       setIsComplete(true);
-      setPendingFile(null);
     } catch (err) {
       if (err instanceof ApiError) {
         setUploadError(err.message);

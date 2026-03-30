@@ -3,12 +3,12 @@
 import { useRef, useCallback } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { Camera } from 'lucide-react';
-import { useUploadContext } from '@/lib/upload-context';
+
+const PENDING_PHOTO_KEY = 'pendingPhotoDataUrl';
 
 export function FabUpload() {
   const router = useRouter();
   const pathname = usePathname();
-  const { setPendingFile } = useUploadContext();
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Hide on upload pages
@@ -20,13 +20,25 @@ export function FabUpload() {
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (file && file.type.startsWith('image/')) {
-        setPendingFile(file);
-        router.push('/upload');
+        // Persist to sessionStorage as data URL so it survives navigation
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          if (typeof reader.result === 'string') {
+            try {
+              sessionStorage.setItem(PENDING_PHOTO_KEY, reader.result);
+            } catch {
+              // sessionStorage full — rare, but handle gracefully
+              console.warn('Failed to persist photo to sessionStorage');
+            }
+            router.push('/upload');
+          }
+        };
+        reader.readAsDataURL(file);
       }
       // Reset so the same file can be selected again
       if (inputRef.current) inputRef.current.value = '';
     },
-    [setPendingFile, router]
+    [router]
   );
 
   return (
@@ -49,3 +61,4 @@ export function FabUpload() {
     </>
   );
 }
+
