@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction, ErrorRequestHandler } from 'express';
 import { ZodError } from 'zod';
-import { config } from '../config';
+import { logger } from '../lib/logger';
 
 // Custom error class for API errors
 export class APIError extends Error {
@@ -40,20 +40,16 @@ function formatZodError(error: ZodError): Record<string, string[]> {
   return details;
 }
 
-// Error handler middleware
+// Error handler middleware — ALWAYS logs, regardless of NODE_ENV
 export const errorHandler: ErrorRequestHandler = (
   err: Error,
-  _req: Request,
+  req: Request,
   res: Response,
   _next: NextFunction
 ): void => {
-  // Log error in development
-  if (config.isDevelopment) {
-    console.error('Error:', err);
-  }
-
   // Handle Zod validation errors
   if (err instanceof ZodError) {
+    logger.warn({ err, url: req.url, method: req.method }, 'Validation error');
     res.status(400).json({
       error: 'ValidationError',
       message: 'Invalid request data',
@@ -64,6 +60,11 @@ export const errorHandler: ErrorRequestHandler = (
 
   // Handle custom API errors
   if (err instanceof APIError) {
+    const level = err.statusCode >= 500 ? 'error' : 'warn';
+    logger[level](
+      { err, statusCode: err.statusCode, url: req.url, method: req.method },
+      err.message
+    );
     res.status(err.statusCode).json({
       error: err.name,
       message: err.message,
@@ -72,9 +73,10 @@ export const errorHandler: ErrorRequestHandler = (
     return;
   }
 
-  // Handle unknown errors
+  // Unknown errors — always log at error level
+  logger.error({ err, url: req.url, method: req.method }, 'Unhandled error');
   res.status(500).json({
     error: 'InternalServerError',
-    message: config.isDevelopment ? err.message : 'An unexpected error occurred',
+    message: 'An unexpected error occurred',
   });
 };
