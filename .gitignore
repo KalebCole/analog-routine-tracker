@@ -70,3 +70,4 @@ local.settings.json
 
 # Docker env (real secrets)
 .env.docker
+.worktrees/
