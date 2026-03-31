@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import { Button } from '@/components/ui/button';
+import { reportError } from '@/lib/telemetry';
 
 export default function UploadError({
   error,
@@ -12,6 +13,7 @@ export default function UploadError({
 }) {
   useEffect(() => {
     console.error('[Upload Error]', error);
+    reportError(error, { boundary: 'upload', digest: error.digest });
   }, [error]);
 
   return (

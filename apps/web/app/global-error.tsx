@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { Button } from '@/components/ui/button';
+import { reportError } from '@/lib/telemetry';
 
 export default function GlobalError({
   error,
@@ -12,6 +12,7 @@ export default function GlobalError({
 }) {
   useEffect(() => {
     console.error('[App Error]', error);
+    reportError(error, { boundary: 'global', digest: error.digest });
   }, [error]);
 
   return (
