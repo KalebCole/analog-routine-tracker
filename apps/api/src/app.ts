@@ -6,6 +6,7 @@ import { config } from './config';
 import { requestLogger } from './middleware/request-logger';
 import { errorHandler } from './middleware/error-handler';
 import { authMiddleware } from './middleware/auth';
+import telemetryRouter from './routes/telemetry';
 import routes from './routes';
 
 const app = express();
@@ -51,6 +52,9 @@ app.use(requestLogger);
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
+
+// Telemetry endpoint (no auth required — frontend reports here)
+app.use('/api', telemetryRouter);
 
 // Auth middleware (applied to all routes below)
 app.use(authMiddleware);
