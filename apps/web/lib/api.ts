@@ -13,6 +13,8 @@ import {
   APIError,
 } from '@analog-routine-tracker/shared';
 
+import { reportError } from './telemetry';
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 // Additional response types
@@ -105,7 +107,9 @@ class ApiClient {
         error: 'NetworkError',
         message: 'Failed to connect to server',
       }));
-      throw new ApiError(response.status, error.message, error.details);
+      const apiError = new ApiError(response.status, error.message, error.details);
+      reportError(apiError, { endpoint: url, method: options.method || 'GET', statusCode: response.status });
+      throw apiError;
     }
 
     // Handle 204 No Content
@@ -170,7 +174,9 @@ class ApiClient {
         error: 'UploadError',
         message: 'Failed to upload photo',
       }));
-      throw new ApiError(response.status, error.message, error.details);
+      const apiError = new ApiError(response.status, error.message, error.details);
+      reportError(apiError, { endpoint: `/routines/${routineId}/upload`, method: 'POST', statusCode: response.status });
+      throw apiError;
     }
 
     return response.json();

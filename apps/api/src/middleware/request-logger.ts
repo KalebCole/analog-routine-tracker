@@ -1,28 +1,36 @@
-import morgan from 'morgan';
-import { config } from '../config';
+import pinoHttp from 'pino-http';
+import { logger } from '../lib/logger';
 
-// Custom token for response time in a cleaner format
-morgan.token('response-time-ms', (_req, res) => {
-  const time = res.getHeader('X-Response-Time');
-  return time ? `${time}ms` : '-';
-});
-
-// Development format: colored, verbose
-const devFormat = ':method :url :status :response-time ms - :res[content-length]';
-
-// Production format: JSON-like for log aggregation
-const prodFormat = JSON.stringify({
-  method: ':method',
-  url: ':url',
-  status: ':status',
-  responseTime: ':response-time',
-  contentLength: ':res[content-length]',
-  userAgent: ':user-agent',
-});
-
-export const requestLogger = morgan(config.isDevelopment ? devFormat : prodFormat, {
-  skip: (req) => {
-    // Skip health check logs
-    return req.url === '/health';
+export const requestLogger = pinoHttp({
+  logger,
+  autoLogging: {
+    ignore: (req) => {
+      const url = (req as { url?: string }).url;
+      return url === '/health' || url === '/api/health';
+    },
+  },
+  customLogLevel: (_req, res, err) => {
+    if (res.statusCode >= 500 || err) return 'error';
+    if (res.statusCode >= 400) return 'warn';
+    return 'info';
+  },
+  customSuccessMessage: (req, res) => {
+    return `${req.method} ${req.url} ${res.statusCode}`;
+  },
+  customErrorMessage: (req, _res, err) => {
+    return `${req.method} ${req.url} failed: ${err.message}`;
+  },
+  serializers: {
+    req: (req) => ({
+      method: req.method,
+      url: req.url,
+      headers: {
+        'user-agent': req.headers?.['user-agent'],
+        'content-type': req.headers?.['content-type'],
+      },
+    }),
+    res: (res) => ({
+      statusCode: res.statusCode,
+    }),
   },
 });

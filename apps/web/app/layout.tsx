@@ -3,6 +3,8 @@ import { Inter } from 'next/font/google';
 import './globals.css';
 import { Toaster } from '@/components/ui/toaster';
 import { ServiceWorkerRegistrar } from '@/components/service-worker-registrar';
+import { ClientShell } from '@/components/client-shell';
+import { TelemetryProvider } from '@/components/telemetry-provider';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -42,10 +44,14 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
       </head>
       <body className={inter.className}>
-        <div className="min-h-screen bg-background safe-area-inset-top safe-area-inset-bottom">
-          {children}
-        </div>
-        <Toaster />
+        <TelemetryProvider>
+          <ClientShell>
+            <div className="min-h-screen bg-background safe-area-inset-top safe-area-inset-bottom">
+              {children}
+            </div>
+            <Toaster />
+          </ClientShell>
+        </TelemetryProvider>
         <ServiceWorkerRegistrar />
       </body>
     </html>

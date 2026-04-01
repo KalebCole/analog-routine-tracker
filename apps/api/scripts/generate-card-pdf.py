@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
 """
-Generate printable routine tracking cards as PDF.
+Generate printable routine tracking cards as PDF — B2 "Boxed Groups" two-column layout.
 
 Usage:
     python generate-card-pdf.py --input <json> --output <pdf>
 
 Input: JSON file with routine definition including name, items, version
 Output: PDF file (one full-page card per routine)
+
+Design: Two balanced columns with group items rendered in light gray rounded boxes.
+Bold left-aligned title with thick underline. Rounded square checkboxes.
+Corner dot alignment markers for OCR.
 """
 
 from reportlab.lib.pagesizes import letter
@@ -20,274 +24,188 @@ from io import BytesIO
 
 # Constants
 PAGE_WIDTH, PAGE_HEIGHT = letter  # 612 x 792 points
-MARGIN = 0.25 * inch
-MARKER_RADIUS = 4  # points (8pt diameter)
+MARGIN = 0.4 * inch
+MARKER_RADIUS = 2.5  # corner dot radius
 
 # Colors
-GRAY = Color(0.7, 0.7, 0.7)
+DARK = Color(0.1, 0.1, 0.1)
+LIGHT = Color(0.65, 0.65, 0.65)
+BG = Color(0.93, 0.93, 0.93)
+BORDER = Color(0.8, 0.8, 0.8)
+
+# Row heights
+ROW_CHECKBOX = 16
+ROW_GROUP_HEADER = 18
+ROW_GROUP_CHILD = 14
+ROW_GROUP_PAD = 8  # top + bottom padding in group box
+ROW_NUMBER = 26
+ROW_SCALE = 38
+ROW_SCALE_NOTES = 16
+ROW_TEXT = 54
+ROW_GROUP_GAP = 4  # gap after group box
 
 
-def count_total_items(items):
-    """Count total items including children of groups."""
-    total = 0
-    for item in items:
-        if item.get('type') == 'group':
-            total += 1 + len(item.get('children', []))
-        else:
-            total += 1
-    return total
-
-
-def estimate_item_height(item, scale=1.0):
-    """Estimate height needed for a single item at given scale."""
-    s = scale
-    item_type = item.get('type', 'checkbox')
-    if item_type == 'group':
-        # Group header
-        h = 20 * s
-        for child in item.get('children', []):
-            h += estimate_item_height(child, scale)
-        return h
-    elif item_type == 'checkbox':
-        return (18 * s + 8 * s)
-    elif item_type == 'number':
-        return (18 * s + 24 * s + 12 * s)
-    elif item_type == 'scale':
-        h = 22 * s + 24 * s + 8 * s
-        if item.get('hasNotes'):
-            h += 16 * s
-        return h
-    elif item_type == 'text':
-        return (18 * s + 2 * 18 * s)
-    return 26 * s
-
-
-def estimate_total_height(items, scale=1.0):
-    """Estimate total height for all items."""
-    total = 0
+def build_struct(items):
+    """Convert items list to structured column-splittable list."""
+    struct = []
     for item in sorted(items, key=lambda x: x.get('order', 0)):
-        total += estimate_item_height(item, scale)
-    return total
+        item_type = item.get('type', 'checkbox')
+        if item_type == 'group':
+            children = sorted(item.get('children', []), key=lambda x: x.get('order', 0))
+            n = len(children)
+            h = ROW_GROUP_HEADER + n * ROW_GROUP_CHILD + ROW_GROUP_PAD + ROW_GROUP_GAP
+            struct.append(('group', item['name'], children, h))
+        elif item_type == 'number':
+            struct.append(('number', item['name'], item.get('unit'), ROW_NUMBER))
+        elif item_type == 'scale':
+            h = ROW_SCALE
+            if item.get('hasNotes'):
+                h += ROW_SCALE_NOTES
+            struct.append(('scale', item['name'], item.get('hasNotes', False), h))
+        elif item_type == 'text':
+            struct.append(('text', item['name'], None, ROW_TEXT))
+        else:
+            struct.append(('checkbox', item['name'], None, ROW_CHECKBOX))
+    return struct
 
 
-class CardRenderer:
-    """Renders a single routine card at a given position."""
-
-    def __init__(self, canvas, x, y, width, height, routine, version, scale=1.0):
-        self.c = canvas
-        self.x = x
-        self.y = y
-        self.width = width
-        self.height = height
-        self.routine = routine
-        self.version = version
-        self.scale = scale
-        self.current_y = y + height - MARGIN
-
-    def draw(self):
-        self._draw_alignment_markers()
-        self._draw_header()
-        self._draw_items()
-        self._draw_version()
-
-    def _draw_alignment_markers(self):
-        self.c.setFillColor(black)
-        positions = [
-            (self.x + MARGIN, self.y + self.height - MARGIN),
-            (self.x + self.width - MARGIN, self.y + self.height - MARGIN),
-            (self.x + MARGIN, self.y + MARGIN),
-            (self.x + self.width - MARGIN, self.y + MARGIN),
-        ]
-        for px, py in positions:
-            self.c.circle(px, py, MARKER_RADIUS, fill=1, stroke=0)
-
-    def _draw_header(self):
-        s = self.scale
-        header_font = max(10, 14 * s)
-        self.c.setFont("Helvetica-Bold", header_font)
-        self.c.setFillColor(black)
-
-        content_x = self.x + MARGIN + MARKER_RADIUS * 2
-        self.current_y -= header_font
-
-        self.c.drawString(content_x, self.current_y, self.routine['name'])
-
-        self.c.setFont("Helvetica", max(8, 10 * s))
-        date_x = self.x + self.width - MARGIN - 80
-        self.c.drawString(date_x, self.current_y + 2, "___/___/___")
-
-        self.current_y -= 10 * s
-        self.c.setStrokeColor(GRAY)
-        self.c.setLineWidth(0.5)
-        self.c.line(content_x, self.current_y, self.x + self.width - MARGIN - MARKER_RADIUS * 2, self.current_y)
-        self.c.setStrokeColor(black)
-
-        self.current_y -= 15 * s
-
-    def _draw_items(self):
-        content_x = self.x + MARGIN + MARKER_RADIUS * 2
-        content_width = self.width - (2 * MARGIN) - (MARKER_RADIUS * 4)
-
-        for item in sorted(self.routine.get('items', []), key=lambda x: x.get('order', 0)):
-            item_type = item['type']
-            if item_type == 'group':
-                self._draw_group_item(content_x, content_width, item)
-            elif item_type == 'checkbox':
-                self._draw_checkbox_item(content_x, item)
-            elif item_type == 'number':
-                self._draw_number_item(content_x, item)
-            elif item_type == 'scale':
-                self._draw_scale_item(content_x, content_width, item)
-            elif item_type == 'text':
-                self._draw_text_item(content_x, content_width, item)
-
-    def _draw_group_item(self, x, content_width, item):
-        s = self.scale
-        font_size = max(8, 11 * s)
-        self.c.setFont("Helvetica-Bold", font_size)
-        self.c.setFillColor(black)
-        self.c.drawString(x, self.current_y - 8 * s, item['name'])
-
-        self.c.setStrokeColor(GRAY)
-        self.c.setLineWidth(0.5)
-        self.c.line(x, self.current_y - 12 * s, x + content_width, self.current_y - 12 * s)
-        self.c.setStrokeColor(black)
-
-        self.current_y -= 20 * s
-
-        indent = 16 * s
-        indented_x = x + indent
-        indented_width = content_width - indent
-
-        for child in sorted(item.get('children', []), key=lambda x: x.get('order', 0)):
-            child_type = child['type']
-            if child_type == 'checkbox':
-                self._draw_checkbox_item(indented_x, child)
-            elif child_type == 'number':
-                self._draw_number_item(indented_x, child)
-            elif child_type == 'scale':
-                self._draw_scale_item(indented_x, indented_width, child)
-            elif child_type == 'text':
-                self._draw_text_item(indented_x, indented_width, child)
-
-    def _draw_checkbox_item(self, x, item):
-        s = self.scale
-        box_size = max(12, 18 * s)
-        font_size = max(8, 11 * s)
-        self.c.setStrokeColor(black)
-        self.c.setLineWidth(1.5 * s)
-        self.c.rect(x, self.current_y - box_size + 4 * s, box_size, box_size, fill=0, stroke=1)
-
-        self.c.setFont("Helvetica", font_size)
-        self.c.setFillColor(black)
-        self.c.drawString(x + box_size + 8 * s, self.current_y - 8 * s, item['name'])
-
-        self.current_y -= (box_size + 8 * s)
-
-    def _draw_number_item(self, x, item):
-        s = self.scale
-        font_size = max(8, 11 * s)
-        box_w = 72 * s
-        box_h = 24 * s
-
-        self.c.setFont("Helvetica", font_size)
-        self.c.setFillColor(black)
-        self.c.drawString(x, self.current_y - 8 * s, item['name'])
-        self.current_y -= 18 * s
-
-        self.c.setStrokeColor(black)
-        self.c.setLineWidth(1)
-        self.c.rect(x, self.current_y - box_h, box_w, box_h, fill=0, stroke=1)
-
-        unit = item.get('unit')
-        if unit:
-            self.c.setFont("Helvetica", max(7, 9 * s))
-            self.c.setFillColor(GRAY)
-            self.c.drawString(x + box_w + 6 * s, self.current_y - box_h + 6 * s, unit)
-            self.c.setFillColor(black)
-
-        self.current_y -= (box_h + 12 * s)
-
-    def _draw_scale_item(self, x, content_width, item):
-        s = self.scale
-        font_size = max(8, 11 * s)
-        box_size = max(16, 24 * s)
-
-        self.c.setFont("Helvetica", font_size)
-        self.c.setFillColor(black)
-        self.c.drawString(x, self.current_y - 8 * s, item['name'])
-        self.current_y -= 22 * s
-
-        self.c.setStrokeColor(black)
-        self.c.setLineWidth(1)
-        self.c.setFont("Helvetica", max(7, 9 * s))
-
-        for i in range(5):
-            box_x = x + (i * (box_size + 6 * s))
-            self.c.rect(box_x, self.current_y - box_size, box_size, box_size, fill=0, stroke=1)
-            self.c.setFillColor(GRAY)
-            self.c.drawCentredString(box_x + box_size / 2, self.current_y + 3 * s, str(i + 1))
-            self.c.setFillColor(black)
-
-        self.current_y -= (box_size + 8 * s)
-
-        if item.get('hasNotes'):
-            self.c.setFont("Helvetica", max(7, 9 * s))
-            self.c.setFillColor(GRAY)
-            self.c.drawString(x, self.current_y - 8 * s, "Notes:")
-            self.c.setFillColor(black)
-            self.c.setStrokeColor(GRAY)
-            self.c.setLineWidth(0.5)
-            self.c.line(x + 35 * s, self.current_y - 10 * s, x + content_width, self.current_y - 10 * s)
-            self.c.setStrokeColor(black)
-            self.current_y -= 16 * s
-
-    def _draw_text_item(self, x, content_width, item):
-        s = self.scale
-        font_size = max(8, 11 * s)
-        line_h = 18 * s
-
-        self.c.setFont("Helvetica", font_size)
-        self.c.setFillColor(black)
-        self.c.drawString(x, self.current_y - 8 * s, item['name'])
-        self.current_y -= 18 * s
-
-        self.c.setStrokeColor(GRAY)
-        self.c.setLineWidth(0.5)
-        for _ in range(2):
-            self.c.line(x, self.current_y - 4 * s, x + content_width, self.current_y - 4 * s)
-            self.current_y -= line_h
-        self.c.setStrokeColor(black)
-
-    def _draw_version(self):
-        self.c.setFont("Helvetica", 8)
-        self.c.setFillColor(GRAY)
-        version_text = f"v{self.version}"
-        self.c.drawRightString(
-            self.x + self.width - MARGIN - MARKER_RADIUS * 2,
-            self.y + MARGIN + MARKER_RADIUS,
-            version_text
-        )
-        self.c.setFillColor(black)
+def balance_columns(struct):
+    """Split structured items into two balanced columns."""
+    total_h = sum(s[-1] for s in struct)
+    half = total_h / 2
+    col1, col2 = [], []
+    running = 0
+    for s in struct:
+        h = s[-1]
+        if running + h / 2 <= half:
+            col1.append(s)
+            running += h
+        else:
+            col2.append(s)
+    return col1, col2
 
 
-def generate_pdf(routine, output_path=None):
-    """Generate PDF with one full-page card. Auto-scales to fit all items."""
-    width = PAGE_WIDTH
-    height = PAGE_HEIGHT
+def draw_checkbox(c, x, y, label, indent=0, size=8):
+    """Draw a rounded square checkbox with label."""
+    c.setStrokeColor(DARK)
+    c.setLineWidth(0.7)
+    c.roundRect(x + indent, y - 1, size, size, 1.5, fill=0, stroke=1)
+    c.setFont("Helvetica", 9)
+    c.setFillColor(DARK)
+    c.drawString(x + indent + size + 5, y, label)
 
-    # Calculate available height for items (after header ~50pt and version ~20pt)
-    header_space = 50
-    footer_space = 25
-    available = height - 2 * MARGIN - header_space - footer_space
 
+def draw_column(c, items, x, start_y, col_width):
+    """Render a list of structured items in a single column."""
+    y = start_y
+    for s in items:
+        kind = s[0]
+
+        if kind == 'group':
+            name, children, h = s[1], s[2], s[-1]
+            box_h = h - ROW_GROUP_GAP
+            gy = y - box_h + 8
+            # Rounded gray box
+            c.setFillColor(BG)
+            c.setStrokeColor(BORDER)
+            c.setLineWidth(0.6)
+            c.roundRect(x - 2, gy, col_width, box_h, 4, fill=1, stroke=1)
+            # Group header
+            c.setFont("Helvetica-Bold", 9)
+            c.setFillColor(DARK)
+            c.drawString(x + 6, y - 4, name)
+            # Children
+            cy = y - 20
+            for ch in children:
+                child_type = ch.get('type', 'checkbox')
+                if child_type == 'number':
+                    c.setFont("Helvetica", 8.5)
+                    c.setFillColor(DARK)
+                    c.drawString(x + 10, cy, ch['name'])
+                    c.setStrokeColor(DARK)
+                    c.setLineWidth(0.5)
+                    c.roundRect(x + 10, cy - 13, 44, 10, 2, fill=0, stroke=1)
+                    unit = ch.get('unit')
+                    if unit:
+                        c.setFont("Helvetica", 7)
+                        c.setFillColor(LIGHT)
+                        c.drawString(x + 58, cy - 12, unit)
+                        c.setFillColor(DARK)
+                    cy -= ROW_GROUP_CHILD
+                else:
+                    draw_checkbox(c, x, cy, ch['name'], indent=10, size=7)
+                    cy -= ROW_GROUP_CHILD
+            y -= h
+
+        elif kind == 'number':
+            name, unit = s[1], s[2]
+            c.setFont("Helvetica", 9)
+            c.setFillColor(DARK)
+            c.drawString(x, y, name)
+            c.setStrokeColor(DARK)
+            c.setLineWidth(0.6)
+            c.roundRect(x, y - 14, 48, 11, 2, fill=0, stroke=1)
+            if unit:
+                c.setFont("Helvetica", 7)
+                c.setFillColor(LIGHT)
+                c.drawString(x + 52, y - 13, unit)
+                c.setFillColor(DARK)
+            y -= ROW_NUMBER
+
+        elif kind == 'scale':
+            name, has_notes = s[1], s[2]
+            c.setFont("Helvetica", 9)
+            c.setFillColor(DARK)
+            c.drawString(x, y, name)
+            box_size = 16
+            scale_y = y - 20
+            c.setStrokeColor(DARK)
+            c.setLineWidth(0.6)
+            c.setFont("Helvetica", 7)
+            for i in range(5):
+                bx = x + (i * (box_size + 4))
+                c.rect(bx, scale_y, box_size, box_size, fill=0, stroke=1)
+                c.setFillColor(LIGHT)
+                c.drawCentredString(bx + box_size / 2, scale_y + box_size + 2, str(i + 1))
+                c.setFillColor(DARK)
+            extra = 0
+            if has_notes:
+                c.setFont("Helvetica", 7)
+                c.setFillColor(LIGHT)
+                c.drawString(x, scale_y - 12, "Notes:")
+                c.setStrokeColor(LIGHT)
+                c.setLineWidth(0.4)
+                c.line(x + 30, scale_y - 14, x + col_width - 8, scale_y - 14)
+                c.setStrokeColor(DARK)
+                c.setFillColor(DARK)
+                extra = ROW_SCALE_NOTES
+            y -= ROW_SCALE + extra
+
+        elif kind == 'text':
+            name = s[1]
+            c.setFont("Helvetica", 9)
+            c.setFillColor(DARK)
+            c.drawString(x, y, name)
+            c.setStrokeColor(LIGHT)
+            c.setLineWidth(0.4)
+            c.line(x, y - 14, x + col_width - 8, y - 14)
+            c.line(x, y - 30, x + col_width - 8, y - 30)
+            c.setStrokeColor(DARK)
+            y -= ROW_TEXT
+
+        else:  # checkbox
+            draw_checkbox(c, x, y, s[1])
+            y -= ROW_CHECKBOX
+
+
+def generate_pdf(routine, output_path=None, copies=1):
+    """Generate a B2 two-column PDF for the given routine."""
     items = routine.get('items', [])
-    
-    # Find the right scale: start at 1.0 and shrink until items fit
-    scale = 1.0
-    needed = estimate_total_height(items, scale)
-    if needed > available:
-        scale = max(0.5, available / needed)  # Don't go below 0.5
+    version = routine.get('version', 1)
+    name = routine.get('name', 'Routine')
+
+    struct = build_struct(items)
+    col1, col2 = balance_columns(struct)
 
     if output_path:
         c = canvas.Canvas(output_path, pagesize=letter)
@@ -295,11 +213,46 @@ def generate_pdf(routine, output_path=None):
         buffer = BytesIO()
         c = canvas.Canvas(buffer, pagesize=letter)
 
-    renderer = CardRenderer(
-        c, 0, 0, width, height, routine,
-        routine.get('version', 1), scale=scale
-    )
-    renderer.draw()
+    W, H = PAGE_WIDTH, PAGE_HEIGHT
+
+    for copy_num in range(copies):
+        if copy_num > 0:
+            c.showPage()
+
+        # --- Corner dot alignment markers ---
+        c.setFillColor(DARK)
+        for cx, cy in [(MARGIN, H - MARGIN), (W - MARGIN, H - MARGIN),
+                       (MARGIN, MARGIN), (W - MARGIN, MARGIN)]:
+            c.circle(cx, cy, MARKER_RADIUS, fill=1, stroke=0)
+
+        # --- Header ---
+        y = H - MARGIN - 22
+        c.setFont("Helvetica-Bold", 18)
+        c.setFillColor(DARK)
+        c.drawString(MARGIN + 6, y, name)
+        c.setFont("Helvetica", 9)
+        c.setFillColor(LIGHT)
+        c.drawRightString(W - MARGIN - 6, y + 2, "Date: ___ / ___ / ___")
+        y -= 8
+        c.setStrokeColor(DARK)
+        c.setLineWidth(2)
+        c.line(MARGIN + 4, y, W - MARGIN - 4, y)
+
+        # --- Columns ---
+        col_gap = 18
+        col_w = (W - 2 * MARGIN - col_gap) / 2
+        c1x = MARGIN + 6
+        c2x = MARGIN + 6 + col_w + col_gap
+        start_y = y - 14
+
+        draw_column(c, col1, c1x, start_y, col_w)
+        draw_column(c, col2, c2x, start_y, col_w)
+
+        # --- Version ---
+        c.setFont("Helvetica", 6)
+        c.setFillColor(LIGHT)
+        c.drawRightString(W - MARGIN - 4, MARGIN + 2, f"v{version}")
+
     c.save()
 
     if not output_path:
@@ -309,17 +262,18 @@ def generate_pdf(routine, output_path=None):
     return {
         'layout': 'full',
         'cards_per_page': 1,
-        'pages_generated': 1,
+        'pages_generated': copies,
         'cards_generated': 1
     }
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Generate routine card PDF')
+    parser = argparse.ArgumentParser(description='Generate routine card PDF (B2 two-column layout)')
     parser.add_argument('--input', '-i', required=True, help='JSON input file or "-" for stdin')
     parser.add_argument('--output', '-o', required=True, help='Output PDF file path')
     parser.add_argument('--layout', '-l', choices=['quarter', 'half', 'full', 'auto'],
-                        default='full', help='Card layout (ignored, always full)')
+                        default='full', help='Card layout (ignored — always full-page two-column)')
+    parser.add_argument('--copies', '-c', type=int, default=1, help='Number of identical pages to generate')
 
     args = parser.parse_args()
 
@@ -335,7 +289,7 @@ def main():
         'version': data.get('version', 1)
     }
 
-    result = generate_pdf(routine, args.output)
+    result = generate_pdf(routine, args.output, copies=args.copies)
     print(json.dumps(result))
 
 

@@ -30,4 +30,4 @@ COPY apps/api/docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
 
 ENTRYPOINT ["/docker-entrypoint.sh"]
-CMD ["node", "apps/api/dist/index.js"]
+CMD ["node", "--require", "./apps/api/dist/instrumentation.js", "apps/api/dist/index.js"]

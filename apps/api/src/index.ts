@@ -48,6 +48,15 @@ async function start() {
     server.close(async () => {
       console.log('HTTP server closed');
 
+      // Flush remaining OTel data before closing
+      try {
+        const { shutdownOtel } = await import('./instrumentation');
+        await shutdownOtel();
+        console.log('OTel SDK shut down');
+      } catch (err) {
+        console.error('OTel shutdown error:', err);
+      }
+
       await closePool();
       console.log('Database pool closed');
 
