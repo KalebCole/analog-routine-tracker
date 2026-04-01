@@ -155,7 +155,7 @@
       "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
       "targets": [
         {
-          "expr": "{source=\"frontend\"} | json",
+          "expr": "{} | json | source=\"frontend\"",
           "refId": "A"
         }
       ]

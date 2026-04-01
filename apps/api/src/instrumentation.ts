@@ -38,9 +38,8 @@ const sdk = new NodeSDK({
 sdk.start();
 console.log('[OTel] Instrumentation started');
 
-process.on('SIGTERM', () => {
-  sdk.shutdown().then(
-    () => console.log('[OTel] Shut down successfully'),
-    (err) => console.error('[OTel] Shutdown error', err)
-  );
-});
+// Export shutdown for coordinated use in index.ts
+// Do NOT register SIGTERM here — index.ts owns the signal handlers
+export function shutdownOtel(): Promise<void> {
+  return sdk.shutdown();
+}

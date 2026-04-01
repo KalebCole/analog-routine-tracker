@@ -1,4 +1,7 @@
-const TELEMETRY_ENDPOINT = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/telemetry`;
+const apiOrigin = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '');
+const TELEMETRY_ENDPOINT = apiOrigin
+  ? `${apiOrigin}/api/telemetry`
+  : '/api/telemetry';
 
 const FLUSH_INTERVAL_MS = 5000;
 const MAX_BUFFER_SIZE = 10;
@@ -40,17 +43,27 @@ function flush() {
     new Blob([payload], { type: 'application/json' })
   );
 
+  if (sent) return; // sendBeacon succeeded
+
   // Fallback to fetch if sendBeacon unavailable or fails
-  if (!sent) {
-    fetch(TELEMETRY_ENDPOINT, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: payload,
-      keepalive: true,
-    }).catch(() => {
-      // Telemetry should never break the app
+  fetch(TELEMETRY_ENDPOINT, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: payload,
+    keepalive: true,
+  })
+    .then((res) => {
+      if (!res.ok) {
+        // Re-enqueue events on server error
+        eventBuffer = events.concat(eventBuffer);
+      }
+    })
+    .catch(() => {
+      // Re-enqueue on network failure (capped to avoid unbounded growth)
+      if (eventBuffer.length < MAX_BUFFER_SIZE * 3) {
+        eventBuffer = events.concat(eventBuffer);
+      }
     });
-  }
 }
 
 function enqueue(event: TelemetryEvent) {

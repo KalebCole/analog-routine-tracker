@@ -92,7 +92,7 @@
       "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
       "targets": [
         {
-          "expr": "{service_name=\"api\"} | json | level = \"error\"",
+          "expr": "{} | json | level = \"error\"",
           "refId": "A"
         }
       ]
